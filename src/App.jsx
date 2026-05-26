@@ -55,7 +55,7 @@ const CATEGORIES = {
   mock:      { label:"Mock Test",        icon:"🎯", color:"#ec4899", desc:"Full Length Test - 25 Qs" },
 };
 
-const ADMIN_PASSWORD = "pscadmin123"; // Change this!
+const ADMIN_PASSWORD = "Akr@54321"; // Change this!
 
 function parseSheetData(raw) {
   try {
