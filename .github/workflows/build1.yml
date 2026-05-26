@@ -1,0 +1,29 @@
+name: Build PSC Quiz APK
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - uses: android-actions/setup-android@v2
+      - run: npm install
+      - run: npm run build
+      - run: npm install -g @capacitor/cli
+      - run: npx cap add android
+      - run: npx cap sync android
+      - run: chmod +x android/gradlew
+      - run: cd android && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v3
+        with:
+          name: PSC-Quiz-Kerala-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
