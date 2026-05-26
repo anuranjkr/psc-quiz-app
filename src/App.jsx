@@ -7,7 +7,7 @@ import { getDatabase, ref, set, get, onValue, push, serverTimestamp, query, orde
 // FIREBASE CONFIG
 // ============================================================
 const firebaseConfig = {
-  apiKey: "AIzaSyArFo7B3M7lSfb0zUSycMUsnke8YSck74k",
+  apiKey: "AIzaSyArFo7B3M7lSfbOzUSycMUsnke8YSck74k",
   authDomain: "psc-quiz-kerala.firebaseapp.com",
   databaseURL: "https://psc-quiz-kerala-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "psc-quiz-kerala",
