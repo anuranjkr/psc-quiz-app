@@ -1,0 +1,8 @@
+{
+  "short_name": "PSC Quiz",
+  "name": "PSC Quiz Kerala",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#080812",
+  "background_color": "#080812"
+}
