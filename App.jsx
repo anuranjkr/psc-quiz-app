@@ -321,6 +321,351 @@ export default function PSCQuizApp() {
         )}
 
         {/* ── QUIZ ── */}
+        import React, { useState, useEffect, useRef } from 'react';
+import Pusher from 'pusher-js';
+import { initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+
+// --- CONFIG ---
+// Firebase - keep for auth + questions + leaderboard
+const firebaseConfig = {
+  apiKey: "YOUR_FIREBASE_API_KEY",
+  authDomain: "YOUR_FIREBASE_AUTH_DOMAIN", 
+  projectId: "YOUR_FIREBASE_PROJECT_ID",
+  storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_FIREBASE_SENDER_ID",
+  appId: "YOUR_FIREBASE_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Pusher - public channels only, no backend needed
+const pusher = new Pusher('043d82d2f8580c617dc7', {
+  cluster: 'ap2',
+  forceTLS: true
+});
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [roomId, setRoomId] = useState('');
+  const [inBattle, setInBattle] = useState(false);
+  const [questions, setQuestions] = useState([]);
+  const [currentQ, setCurrentQ] = useState(0);
+  const [score, setScore] = useState(0);
+  const [opponentScore, setOpponentScore] = useState(0);
+  const [opponent, setOpponent] = useState(null);
+  const [gameOver, setGameOver] = useState(false);
+  const [winner, setWinner] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState('kerala-history');
+  const [topics, setTopics] = useState([]);
+  const channelRef = useRef(null);
+
+  // Firebase Auth
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Load topics from Firebase
+  useEffect(() => {
+    const loadTopics = async () => {
+      const querySnapshot = await getDocs(collection(db, 'questions'));
+      const topicList = [];
+      querySnapshot.forEach((doc) => {
+        topicList.push(doc.id);
+      });
+      setTopics(topicList);
+    };
+    if (user) loadTopics();
+  }, [user]);
+
+  const login = async () => {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+    leaveBattle();
+  };
+
+  // Load questions from Firebase
+  const loadQuestions = async (topic) => {
+    const qDoc = await getDoc(doc(db, 'questions', topic));
+    if (qDoc.exists()) {
+      const shuffled = qDoc.data().list.sort(() => 0.5 - Math.random());
+      setQuestions(shuffled.slice(0, 10)); // 10 questions per battle
+    } else {
+      alert('No questions found for this topic');
+    }
+  };
+
+  // --- PUSHER BATTLE LOGIC - PUBLIC CHANNELS ---
+  const joinBattle = async () => {
+    if (!user) return alert('Login first');
+    if (!roomId) return alert('Enter Room ID');
+    if (topics.length === 0) return alert('No topics found in Firebase');
+
+    await loadQuestions(selectedTopic);
+    
+    // Subscribe to public channel - no auth needed
+    const channel = pusher.subscribe(`battle-room-${roomId}`);
+    channelRef.current = channel;
+
+    channel.bind('pusher:subscription_succeeded', () => {
+      // Announce you joined
+      channel.trigger('client-player-joined', {
+        uid: user.uid,
+        name: user.displayName,
+        photo: user.photoURL
+      });
+      setInBattle(true);
+      setGameOver(false);
+      setScore(0);
+      setOpponentScore(0);
+      setCurrentQ(0);
+    });
+
+    // Opponent joined
+    channel.bind('client-player-joined', (data) => {
+      if (data.uid!== user.uid) {
+        setOpponent(data);
+      }
+    });
+
+    // Opponent answered
+    channel.bind('client-answer', (data) => {
+      if (data.uid!== user.uid) {
+        if (data.correct) {
+          setOpponentScore(prev => prev + 1);
+        }
+        // Move to next question if opponent answered
+        if (data.questionIndex === currentQ) {
+          setTimeout(() => nextQuestion(), 1000);
+        }
+      }
+    });
+
+    // Game over event
+    channel.bind('client-game-over', (data) => {
+      setGameOver(true);
+      setWinner(data.winner);
+      saveResult(data.winner === user.displayName? score : opponentScore);
+    });
+  };
+
+  const submitAnswer = (selectedOption) => {
+    if (!channelRef.current || gameOver) return;
+    
+    const correct = selectedOption === questions[currentQ].answer;
+    if (correct) setScore(prev => prev + 1);
+
+    // Send answer to opponent
+    channelRef.current.trigger('client-answer', {
+      uid: user.uid,
+      name: user.displayName,
+      answer: selectedOption,
+      correct: correct,
+      questionIndex: currentQ,
+      timestamp: Date.now()
+    });
+
+    // Move to next question after 1 sec
+    setTimeout(() => nextQuestion(), 1000);
+  };
+
+  const nextQuestion = () => {
+    if (currentQ < questions.length - 1) {
+      setCurrentQ(prev => prev + 1);
+    } else {
+      // Game over
+      const finalWinner = score > opponentScore? user.displayName : 
+                         opponentScore > score? opponent?.name : 'Tie';
+      
+      channelRef.current.trigger('client-game-over', {
+        winner: finalWinner,
+        myScore: score,
+        opponentScore: opponentScore
+      });
+      
+      setGameOver(true);
+      setWinner(finalWinner);
+      saveResult(score);
+    }
+  };
+
+  const leaveBattle = () => {
+    if (channelRef.current) {
+      pusher.unsubscribe(`battle-room-${roomId}`);
+      channelRef.current = null;
+    }
+    setInBattle(false);
+    setOpponent(null);
+    setCurrentQ(0);
+    setScore(0);
+    setOpponentScore(0);
+    setGameOver(false);
+    setQuestions([]);
+  };
+
+  // Save result to Firebase
+  const saveResult = async (finalScore) => {
+    if (!user) return;
+    await setDoc(doc(db, 'results', `${user.uid}_${Date.now()}`), {
+      uid: user.uid,
+      name: user.displayName,
+      score: finalScore,
+      topic: selectedTopic,
+      roomId: roomId,
+      date: new Date().toISOString(),
+      opponent: opponent?.name || 'None'
+    });
+  };
+
+  // --- UI ---
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-4">
+        <h1 className="text-3xl font-bold mb-6">KPSC Quiz Battle</h1>
+        <p className="mb-6 text-gray-600">Login to challenge friends</p>
+        <button onClick={login} className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold">
+          Login with Google
+        </button>
+      </div>
+    );
+  }
+
+  if (!inBattle) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-md mx-auto bg-white rounded-xl shadow-md p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-3">
+              <img src={user.photoURL} alt="profile" className="w-10 h-10 rounded-full" />
+              <div>
+                <p className="font-semibold">{user.displayName}</p>
+                <button onClick={logout} className="text-xs text-red-500">Logout</button>
+              </div>
+            </div>
+          </div>
+
+          <h1 className="text-2xl font-bold mb-6 text-center">Join Battle Room</h1>
+          
+          <label className="block text-sm font-medium mb-2">Select Topic</label>
+          <select 
+            value={selectedTopic} 
+            onChange={e => setSelectedTopic(e.target.value)}
+            className="border p-3 w-full mb-4 rounded-lg"
+          >
+            {topics.map(topic => (
+              <option key={topic} value={topic}>{topic}</option>
+            ))}
+          </select>
+
+          <label className="block text-sm font-medium mb-2">Room ID</label>
+          <input
+            value={roomId}
+            onChange={e => setRoomId(e.target.value)}
+            placeholder="Enter same Room ID as friend"
+            className="border p-3 w-full mb-6 rounded-lg"
+          />
+          
+          <button
+            onClick={joinBattle}
+            className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg w-full font-semibold"
+          >
+            Join Battle
+          </button>
+          
+          <p className="text-xs text-gray-500 mt-4 text-center">
+            Both players must enter the same Room ID
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameOver) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-md p-8 text-center">
+          <h2 className="text-3xl font-bold mb-4">Game Over!</h2>
+          <p className="text-xl mb-6">
+            {winner === 'Tie'? "It's a Tie!" : `Winner: ${winner}`}
+          </p>
+          <div className="bg-gray-100 p-4 rounded-lg mb-6">
+            <p>You: {score}</p>
+            <p>{opponent?.name || 'Opponent'}: {opponentScore}</p>
+          </div>
+          <button
+            onClick={leaveBattle}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg w-full font-semibold"
+          >
+            Back to Lobby
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-xl shadow-md p-6 mb-4">
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-center">
+              <p className="text-sm text-gray-500">You</p>
+              <p className="text-2xl font-bold text-blue-600">{score}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-500">Q {currentQ + 1}/{questions.length}</p>
+              <p className="text-xs text-gray-400">{selectedTopic}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-500">{opponent?.name || 'Waiting...'}</p>
+              <p className="text-2xl font-bold text-red-600">{opponentScore}</p>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h2 className="text-lg font-semibold">{questions[currentQ]?.question}</h2>
+          </div>
+
+          <div className="grid gap-3">
+            {questions[currentQ]?.options?.map((opt, i) => (
+              <button
+                key={i}
+                onClick={() => submitAnswer(opt)}
+             
+                className="bg-white border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 p-4 rounded-lg text-left font-medium transition"
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={leaveBattle}
+          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm"
+        >
+          Leave Battle
+        </button>
+      </div>
+    </div>
+  );
+        }
         {screen === "quiz" && q && (
           <div className="pop" style={{ paddingTop: 18 }}>
             {/* Progress */}
