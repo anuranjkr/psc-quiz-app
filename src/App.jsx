@@ -1,11 +1,6 @@
-Perfect! I'll add a JSON file upload option directly in the Admin Panel. This is the simplest method - just upload a JSON file and all questions will be imported automatically.
-
-Here's the updated App.jsx with JSON upload functionality:
-
-```jsx
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from "firebase/auth";
 import { getDatabase, ref, set, get, onValue, push, serverTimestamp, query, orderByChild, limitToLast, remove, update } from "firebase/database";
 
 const firebaseConfig = {
@@ -35,30 +30,20 @@ const DEFAULT_CATS = [
 ];
 
 const BUILTIN_Q = [
-  { id: "b1", q: "Kerala formed on?", qm: "കേരളം രൂപീകരിച്ചത്?", options: ["Nov 1, 1956", "Aug 15, 1947", "Jan 26, 1950", "Nov 1, 1960"], answer: 0, cat: "ldc", difficulty: "easy", explanation: "Kerala was formed on November 1, 1956 as part of the States Reorganisation Act." },
+  { id: "b1", q: "Kerala formed on?", qm: "കേരളം രൂപീകരിച്ചത്?", options: ["Nov 1, 1956", "Aug 15, 1947", "Jan 26, 1950", "Nov 1, 1960"], answer: 0, cat: "ldc", difficulty: "easy", explanation: "Kerala was formed on November 1, 1956" },
   { id: "b2", q: "Longest river in Kerala?", qm: "കേരളത്തിലെ ഏറ്റവും നീളം?", options: ["Periyar", "Bharathapuzha", "Pamba", "Chaliyar"], answer: 1, cat: "ldc", difficulty: "easy", explanation: "Bharathapuzha (312 km) is the longest river in Kerala." },
   { id: "b3", q: "Capital of Kerala?", qm: "കേരളത്തിന്റെ തലസ്ഥാനം?", options: ["Kochi", "Kozhikode", "Thiruvananthapuram", "Thrissur"], answer: 2, cat: "ldc", difficulty: "easy", explanation: "Thiruvananthapuram is the capital of Kerala." },
-  { id: "b4", q: "National game of India?", qm: "ഇന്ത്യയുടെ ദേശീയ കായിക വിനോദം?", options: ["Cricket", "Football", "Hockey", "Kabaddi"], answer: 2, cat: "psc", difficulty: "easy", explanation: "Field Hockey is the national game of India." },
-  { id: "b5", q: "Chemical symbol of Gold?", qm: "സ്വർണ്ണത്തിന്റെ രാസ ചിഹ്നം?", options: ["Go", "Gd", "Au", "Ag"], answer: 2, cat: "science", difficulty: "easy", explanation: "Au comes from the Latin word 'Aurum' meaning gold." },
-  { id: "b6", q: "Chandrayaan-3 year?", qm: "ചന്ദ്രയാൻ-3 വർഷം?", options: ["2022", "2023", "2024", "2021"], answer: 1, cat: "current", difficulty: "easy", explanation: "Chandrayaan-3 successfully landed on the Moon's south pole on August 23, 2023." },
-  { id: "b7", q: "Battle of Plassey year?", qm: "പ്ലാസി യുദ്ധം?", options: ["1757", "1764", "1799", "1857"], answer: 0, cat: "history", difficulty: "medium", explanation: "The Battle of Plassey was fought on June 23, 1757." },
-  { id: "b8", q: "Largest state by area?", qm: "ഏറ്റവും വലിയ സംസ്ഥാനം?", options: ["MP", "Rajasthan", "Maharashtra", "UP"], answer: 1, cat: "geography", difficulty: "easy", explanation: "Rajasthan is the largest state in India by area." },
-  { id: "b9", q: "IPC stands for?", qm: "IPC-യുടെ പൂർണ്ണ രൂപം?", options: ["Indian Penal Code", "Indian Police Code", "Indian Penal Court", "Indian Public Code"], answer: 0, cat: "police", difficulty: "easy", explanation: "IPC - Indian Penal Code, enacted in 1860." },
-  { id: "b10", q: "Speed of light?", qm: "പ്രകാശ വേഗത?", options: ["3×10⁸ m/s", "3×10⁶ m/s", "3×10⁵ m/s", "3×10⁴ m/s"], answer: 0, cat: "science", difficulty: "medium", explanation: "Speed of light in vacuum is approximately 3×10⁸ m/s." },
 ];
 
-const ICONS = ["📋", "🏛️", "👮", "🔬", "📜", "🌍", "📰", "🎯", "📚", "✏️", "🧪", "⚖️", "💡", "🗺️", "🏆", "📖", "🔭", "🧮", "🏅", "📐", "🎓", "🔑", "⚡", "🌟", "🏫"];
-const COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#06b6d4", "#ef4444", "#ec4899", "#84cc16", "#f97316", "#14b8a6", "#a855f7", "#0ea5e9", "#d946ef"];
+const ICONS = ["📋", "🏛️", "👮", "🔬", "📜", "🌍", "📰", "🎯", "📚", "✏️"];
+const COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#06b6d4", "#ef4444"];
 const FORUM_CATS = [
   { id: "general", label: "General", icon: "💬", color: "#6366f1" },
   { id: "ldc", label: "LDC Tips", icon: "📋", color: "#8b5cf6" },
   { id: "current", label: "Current Affairs", icon: "📰", color: "#ef4444" },
   { id: "doubt", label: "Doubts", icon: "🤔", color: "#f59e0b" },
-  { id: "resources", label: "Resources", icon: "📚", color: "#10b981" },
-  { id: "motivation", label: "Motivation", icon: "🔥", color: "#06b6d4" },
 ];
 
-// Computer AI with difficulty-based accuracy
 const computerAnswer = (q) => {
   let accuracy = 0.65;
   if (q.difficulty === "easy") accuracy = 0.75;
@@ -83,6 +68,9 @@ export default function App() {
   const [pw, setPw] = useState("");
   const [dn, setDn] = useState("");
   const [authErr, setAuthErr] = useState("");
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [forgotPasswordMsg, setForgotPasswordMsg] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   // Data state
   const [categories, setCategories] = useState(DEFAULT_CATS);
@@ -123,7 +111,7 @@ export default function App() {
   const [contributeQ, setContributeQ] = useState({ q: "", qm: "", o1: "", o2: "", o3: "", o4: "", answer: "0", cat: "ldc", difficulty: "easy", explanation: "" });
   const [contribStatus, setContribStatus] = useState("");
 
-  // Battle state
+  // Battle state - FIXED for better performance
   const [battleType, setBattleType] = useState(null);
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -139,11 +127,15 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [battleStarted, setBattleStarted] = useState(false);
   const [waitingRandom, setWaitingRandom] = useState(false);
+  const [battleLoading, setBattleLoading] = useState(false);
   const randomQueueRef = useRef(null);
+  const roomListenersRef = useRef([]);
 
   // Forum state
   const [forumMsg, setForumMsg] = useState("");
   const [forumCategory, setForumCategory] = useState("general");
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyMsg, setReplyMsg] = useState("");
 
   // Notification state
   const [notif, setNotif] = useState(null);
@@ -168,6 +160,41 @@ export default function App() {
       setScreen("home");
     }
   }, [history]);
+
+  // Cleanup room listeners
+  const cleanupRoomListeners = useCallback(() => {
+    roomListenersRef.current.forEach(unsubscribe => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    });
+    roomListenersRef.current = [];
+  }, []);
+
+  // Forgot password function
+  const handleForgotPassword = useCallback(async () => {
+    if (!forgotPasswordEmail) {
+      setForgotPasswordMsg("❌ Please enter your email address!");
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, forgotPasswordEmail);
+      setForgotPasswordMsg("✅ Password reset email sent! Check your inbox.");
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setForgotPasswordMsg("");
+        setForgotPasswordEmail("");
+      }, 3000);
+    } catch (error) {
+      console.error("Password reset error:", error);
+      if (error.code === "auth/user-not-found") {
+        setForgotPasswordMsg("❌ No account found with this email!");
+      } else {
+        setForgotPasswordMsg("❌ Failed to send reset email. Try again!");
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [forgotPasswordEmail, auth]);
 
   // Load all data with proper cleanup
   useEffect(() => {
@@ -300,8 +327,12 @@ export default function App() {
       if (user) {
         remove(ref(db, `online/${user.uid}`)).catch(console.error);
       }
+      cleanupRoomListeners();
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (battleTimerRef.current) clearInterval(battleTimerRef.current);
+      if (randomQueueRef.current) clearTimeout(randomQueueRef.current);
     };
-  }, [user]);
+  }, [user, cleanupRoomListeners]);
 
   // Quiz timer
   useEffect(() => {
@@ -323,9 +354,9 @@ export default function App() {
     };
   }, [curr, screen, picked]);
 
-  // Battle timer
+  // Battle timer - FIXED performance
   useEffect(() => {
-    if (screen !== "battle" || battlePicked !== null || !battleStarted) return;
+    if (screen !== "battle" || battlePicked !== null || !battleStarted || battleLoading) return;
     setBattleTimer(20);
     if (battleTimerRef.current) clearInterval(battleTimerRef.current);
     battleTimerRef.current = setInterval(() => {
@@ -341,7 +372,7 @@ export default function App() {
     return () => {
       if (battleTimerRef.current) clearInterval(battleTimerRef.current);
     };
-  }, [battleCurr, screen, battleStarted, battlePicked]);
+  }, [battleCurr, screen, battleStarted, battlePicked, battleLoading]);
 
   // Auth functions
   const loginGoogle = useCallback(async () => {
@@ -391,12 +422,13 @@ export default function App() {
 
   const logout = useCallback(async () => {
     try {
+      cleanupRoomListeners();
       if (user) await remove(ref(db, `online/${user.uid}`));
       await signOut(auth);
     } catch (error) {
       console.error("Logout error:", error);
     }
-  }, [user]);
+  }, [user, cleanupRoomListeners]);
 
   // Quiz functions
   const startQuiz = useCallback((cat) => {
@@ -467,7 +499,7 @@ export default function App() {
   }, [user, answers, categories, selCat, questions.length]);
 
   const reportQ = useCallback(async (qId, qText) => {
-    const reason = window.prompt(`"${qText.substring(0, 50)}..."\n\nWhat's the issue with this question?`);
+    const reason = window.prompt(`"${qText.substring(0, 50)}..."\n\nWhat's the issue?`);
     if (!reason) return;
     try {
       await push(ref(db, "reports"), {
@@ -477,19 +509,22 @@ export default function App() {
         reportedAt: serverTimestamp(),
         status: "pending"
       });
-      showNotif("✅ Report submitted! Admin will review it.");
+      showNotif("✅ Report submitted!");
     } catch (error) {
       console.error("Error reporting question:", error);
       showNotif("❌ Failed to submit report!", "error");
     }
   }, [user, showNotif]);
 
-  // Battle functions
+  // Battle functions - OPTIMIZED for speed
   const createRoom = useCallback(async (type) => {
+    if (battleLoading) return;
+    setBattleLoading(true);
     try {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
       const maxP = type === "multi" ? 100 : 2;
       const qs = allQ.sort(() => Math.random() - 0.5).slice(0, quizCount);
+      
       await set(ref(db, `rooms/${code}`), {
         host: user.displayName || user.email,
         hostUid: user.uid,
@@ -513,7 +548,13 @@ export default function App() {
           }
         }
       });
+      
       setRoomCode(code);
+      setRoomData(null);
+      setBattleQ([]);
+      setChatMessages([]);
+      
+      // Set up listeners
       const roomRef = ref(db, `rooms/${code}`);
       const chatRef = ref(db, `rooms/${code}/chat`);
       
@@ -523,6 +564,7 @@ export default function App() {
           if (snap.val().questions) setBattleQ(Object.values(snap.val().questions));
         }
       });
+      
       const unsubscribeChat = onValue(chatRef, (snap) => {
         if (snap.exists()) {
           const msgs = [];
@@ -531,42 +573,51 @@ export default function App() {
         }
       });
       
+      roomListenersRef.current = [unsubscribeRoom, unsubscribeChat];
       goTo("room");
-      return () => {
-        unsubscribeRoom();
-        unsubscribeChat();
-      };
     } catch (error) {
       console.error("Error creating room:", error);
       showNotif("Failed to create room!", "error");
+    } finally {
+      setBattleLoading(false);
     }
-  }, [user, allQ, quizCount, goTo, showNotif]);
+  }, [user, allQ, quizCount, goTo, showNotif, battleLoading]);
 
   const joinRoom = useCallback(async () => {
+    if (battleLoading) return;
     const code = joinCode.toUpperCase().trim();
     if (!code) {
       setRoomErr("❌ Please enter a room code!");
       return;
     }
+    setBattleLoading(true);
     try {
       const snap = await get(ref(db, `rooms/${code}`));
       if (!snap.exists()) {
         setRoomErr("❌ Room not found!");
+        setBattleLoading(false);
         return;
       }
       const room = snap.val();
       const playerCount = Object.keys(room.players || {}).length;
       if (playerCount >= room.maxPlayers) {
         setRoomErr("❌ Room is full!");
+        setBattleLoading(false);
         return;
       }
+      
       await set(ref(db, `rooms/${code}/players/${user.uid}`), {
         name: user.displayName || user.email,
         score: 0,
         ready: false,
         avatar: user.displayName ? user.displayName[0].toUpperCase() : "U"
       });
+      
       setRoomCode(code);
+      setRoomData(null);
+      setBattleQ([]);
+      setChatMessages([]);
+      
       const roomRef = ref(db, `rooms/${code}`);
       const chatRef = ref(db, `rooms/${code}/chat`);
       
@@ -576,6 +627,7 @@ export default function App() {
           if (snap.val().questions) setBattleQ(Object.values(snap.val().questions));
         }
       });
+      
       const unsubscribeChat = onValue(chatRef, (snap) => {
         if (snap.exists()) {
           const msgs = [];
@@ -584,19 +636,20 @@ export default function App() {
         }
       });
       
+      roomListenersRef.current = [unsubscribeRoom, unsubscribeChat];
       goTo("room");
-      return () => {
-        unsubscribeRoom();
-        unsubscribeChat();
-      };
     } catch (error) {
       console.error("Error joining room:", error);
       setRoomErr("❌ Failed to join room!");
+    } finally {
+      setBattleLoading(false);
     }
-  }, [joinCode, user, goTo]);
+  }, [joinCode, user, goTo, battleLoading]);
 
   const findRandom = useCallback(async () => {
+    if (battleLoading) return;
     setWaitingRandom(true);
+    setBattleLoading(true);
     try {
       const snap = await get(ref(db, "random_queue"));
       if (snap.exists()) {
@@ -607,6 +660,7 @@ export default function App() {
           await remove(ref(db, `random_queue/${available.key}`));
           await joinRoomById(available.roomCode);
           setWaitingRandom(false);
+          setBattleLoading(false);
           return;
         }
       }
@@ -635,14 +689,17 @@ export default function App() {
           }
         } catch (error) {
           console.error("Error finding random opponent:", error);
+        } finally {
+          setBattleLoading(false);
         }
       }, 10000);
     } catch (error) {
       console.error("Error in random matchmaking:", error);
       showNotif("Failed to find opponent!", "error");
       setWaitingRandom(false);
+      setBattleLoading(false);
     }
-  }, [user, createRoom, joinRoomById, showNotif]);
+  }, [user, createRoom, joinRoomById, showNotif, battleLoading]);
 
   const joinRoomById = useCallback(async (code) => {
     try {
@@ -653,6 +710,10 @@ export default function App() {
         avatar: user.displayName ? user.displayName[0].toUpperCase() : "U"
       });
       setRoomCode(code);
+      setRoomData(null);
+      setBattleQ([]);
+      setChatMessages([]);
+      
       const roomRef = ref(db, `rooms/${code}`);
       const chatRef = ref(db, `rooms/${code}/chat`);
       
@@ -662,6 +723,7 @@ export default function App() {
           if (snap.val().questions) setBattleQ(Object.values(snap.val().questions));
         }
       });
+      
       const unsubscribeChat = onValue(chatRef, (snap) => {
         if (snap.exists()) {
           const msgs = [];
@@ -670,18 +732,16 @@ export default function App() {
         }
       });
       
+      roomListenersRef.current = [unsubscribeRoom, unsubscribeChat];
       goTo("room");
-      return () => {
-        unsubscribeRoom();
-        unsubscribeChat();
-      };
     } catch (error) {
       console.error("Error joining room by ID:", error);
     }
   }, [user, goTo]);
 
   const startBattleGame = useCallback(async () => {
-    if (!roomCode) return;
+    if (!roomCode || battleLoading) return;
+    setBattleLoading(true);
     try {
       await update(ref(db, `rooms/${roomCode}`), {
         status: "playing",
@@ -697,11 +757,13 @@ export default function App() {
     } catch (error) {
       console.error("Error starting battle:", error);
       showNotif("Failed to start battle!", "error");
+    } finally {
+      setBattleLoading(false);
     }
-  }, [roomCode, roomData, showNotif]);
+  }, [roomCode, roomData, showNotif, battleLoading]);
 
   const handleBattleAns = useCallback((i) => {
-    if (battlePicked !== null) return;
+    if (battlePicked !== null || battleLoading) return;
     if (battleTimerRef.current) clearInterval(battleTimerRef.current);
     setBattlePicked(i);
     const q = battleQ[battleCurr];
@@ -709,25 +771,30 @@ export default function App() {
     const ok = i === q.answer;
     const newScore = ok ? battleScore + 1 : battleScore;
     if (ok) setBattleScore(newScore);
+    
+    // Update score in Firebase without waiting
     set(ref(db, `rooms/${roomCode}/players/${user.uid}/score`), newScore).catch(console.error);
+    
     if (roomData?.players?.computer) {
       const compAns = computerAnswer(q);
       const compOk = compAns === q.answer;
       const curComp = roomData?.players?.computer?.score || 0;
       setTimeout(() => {
         set(ref(db, `rooms/${roomCode}/players/computer/score`), compOk ? curComp + 1 : curComp).catch(console.error);
-      }, 600 + Math.random() * 1000);
+      }, 300);
     }
-  }, [battlePicked, battleQ, battleCurr, battleScore, roomCode, user.uid, roomData]);
+  }, [battlePicked, battleQ, battleCurr, battleScore, roomCode, user.uid, roomData, battleLoading]);
 
   const nextBattle = useCallback(() => {
+    if (battleLoading) return;
     if (battleCurr + 1 >= battleQ.length) {
+      cleanupRoomListeners();
       goTo("battle_result");
       return;
     }
     setBattleCurr(c => c + 1);
     setBattlePicked(null);
-  }, [battleCurr, battleQ.length, goTo]);
+  }, [battleCurr, battleQ.length, goTo, cleanupRoomListeners, battleLoading]);
 
   const sendChat = useCallback(async () => {
     if (!chatMsg.trim() || !roomCode) return;
@@ -744,7 +811,7 @@ export default function App() {
     }
   }, [chatMsg, roomCode, user]);
 
-  // Forum functions
+  // Forum functions with reply feature
   const sendForumPost = useCallback(async () => {
     if (!forumMsg.trim()) return;
     try {
@@ -756,6 +823,7 @@ export default function App() {
         category: forumCategory === "all" ? "general" : forumCategory,
         time: Date.now(),
         likes: 0,
+        replies: []
       });
       setForumMsg("");
       showNotif("Post published! 🎉");
@@ -764,6 +832,31 @@ export default function App() {
       showNotif("Failed to post!", "error");
     }
   }, [forumMsg, forumCategory, user, showNotif]);
+
+  const sendReply = useCallback(async (postId) => {
+    if (!replyMsg.trim()) return;
+    try {
+      const postRef = ref(db, `forum/${postId}`);
+      const snap = await get(postRef);
+      if (snap.exists()) {
+        const post = snap.val();
+        const replies = post.replies || [];
+        replies.push({
+          uid: user.uid,
+          name: user.displayName || user.email.split("@")[0],
+          msg: replyMsg.trim(),
+          time: Date.now()
+        });
+        await update(postRef, { replies });
+        setReplyMsg("");
+        setReplyingTo(null);
+        showNotif("Reply sent! 💬");
+      }
+    } catch (error) {
+      console.error("Error sending reply:", error);
+      showNotif("Failed to send reply!", "error");
+    }
+  }, [replyMsg, user, showNotif]);
 
   const deleteForumPost = useCallback(async (postId) => {
     if (!window.confirm("Delete this post?")) return;
@@ -794,7 +887,7 @@ export default function App() {
     const unsubscribe = onValue(roomRef, (snap) => {
       if (!snap.exists()) return;
       const room = snap.val();
-      if (room.status === "playing" && (screen === "room" || screen === "battle_lobby")) {
+      if (room.status === "playing" && (screen === "room" || screen === "battle_lobby") && !battleStarted) {
         if (room.questions) {
           setBattleQ(Object.values(room.questions));
         }
@@ -807,7 +900,7 @@ export default function App() {
       }
     });
     return () => unsubscribe();
-  }, [roomCode, screen]);
+  }, [roomCode, screen, battleStarted]);
 
   // Contribute functions
   const submitContribution = useCallback(async () => {
@@ -990,7 +1083,7 @@ export default function App() {
     }
   }, [showNotif]);
 
-  // JSON File Import Function - NEW!
+  // JSON File Import Function
   const importJSONFile = useCallback(async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -1001,12 +1094,10 @@ export default function App() {
       const text = await file.text();
       const questionsData = JSON.parse(text);
       
-      // Check if it's an array or object
       let questionsArray = [];
       if (Array.isArray(questionsData)) {
         questionsArray = questionsData;
       } else if (typeof questionsData === 'object') {
-        // Convert object to array
         questionsArray = Object.values(questionsData);
       }
       
@@ -1023,13 +1114,11 @@ export default function App() {
       for (let i = 0; i < questionsArray.length; i++) {
         const q = questionsArray[i];
         
-        // Validate required fields
         if (!q.q || !q.options || !Array.isArray(q.options) || q.options.length < 4) {
           errorCount++;
           continue;
         }
         
-        // Map answer (could be number 0-3 or letter A-D)
         let answerIndex = q.answer;
         if (typeof answerIndex === 'string') {
           const answerMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3, 'a': 0, 'b': 1, 'c': 2, 'd': 3 };
@@ -1062,11 +1151,10 @@ export default function App() {
         setJsonImportStatus(`✅ Successfully imported ${successCount} questions to ${jsonCategory} category!`);
         showNotif(`🎉 ${successCount} questions imported successfully!`);
       } else {
-        setJsonImportStatus(`⚠️ Imported ${successCount} questions with ${errorCount} errors. Check console for details.`);
+        setJsonImportStatus(`⚠️ Imported ${successCount} questions with ${errorCount} errors.`);
         showNotif(`Imported ${successCount} questions (${errorCount} failed)`, "error");
       }
       
-      // Clear the file input
       event.target.value = '';
       
     } catch (error) {
@@ -1077,7 +1165,6 @@ export default function App() {
     }
   }, [jsonCategory, jsonDifficulty, user, showNotif]);
 
-  // Sample JSON template download
   const downloadSampleJSON = useCallback(() => {
     const sampleQuestions = [
       {
@@ -1090,13 +1177,7 @@ export default function App() {
         "q": "Who wrote the Malayalam novel 'Aadujeevitham'?",
         "options": ["M. T. Vasudevan Nair", "Benyamin", "S. K. Pottekkatt", "Vaikom Muhammad Basheer"],
         "answer": 1,
-        "explanation": "Benyamin wrote the award-winning novel 'Aadujeevitham' (Goat Days)"
-      },
-      {
-        "q": "The famous 'Bekal Fort' is located in which district?",
-        "options": ["Kasaragod", "Kannur", "Kozhikode", "Malappuram"],
-        "answer": 0,
-        "explanation": "Bekal Fort is the largest fort in Kerala located in Kasaragod district"
+        "explanation": "Benyamin wrote the award-winning novel 'Aadujeevitham'"
       }
     ];
     
@@ -1109,52 +1190,6 @@ export default function App() {
     a.click();
     URL.revokeObjectURL(url);
     showNotif("Sample JSON downloaded! 📥");
-  }, [showNotif]);
-
-  // Download full 30 questions JSON
-  const downloadFullJSON = useCallback(() => {
-    const fullQuestions = [
-      {q:"Which district in Kerala has the highest literacy rate?",options:["Thiruvananthapuram","Kollam","Kottayam","Pathanamthitta"],answer:2,exp:"Kottayam is the first district in India to achieve 100% literacy"},
-      {q:"Who wrote the Malayalam novel 'Aadujeevitham'?",options:["M. T. Vasudevan Nair","Benyamin","S. K. Pottekkatt","Vaikom Muhammad Basheer"],answer:1,exp:"Benyamin wrote the award-winning novel 'Aadujeevitham'"},
-      {q:"The famous 'Bekal Fort' is located in which district?",options:["Kasaragod","Kannur","Kozhikode","Malappuram"],answer:0,exp:"Bekal Fort is the largest fort in Kerala located in Kasaragod"},
-      {q:"Who is known as the 'Madan Mohan of Malayalam'?",options:["K. J. Yesudas","M. G. Sreekumar","P. Jayachandran","K. S. Chithra"],answer:2,exp:"P. Jayachandran is known as 'Madana Mohana'"},
-      {q:"The 'Kerala Kalamandalam' is situated in which district?",options:["Thrissur","Palakkad","Ernakulam","Alappuzha"],answer:0,exp:"Kerala Kalamandalam is in Cheruthuruthy, Thrissur district"},
-      {q:"Which river is known as the 'Ganga of Kerala'?",options:["Periyar","Bharathapuzha","Pamba","Chaliyar"],answer:2,exp:"Pamba River is called 'Dakshina Ganga'"},
-      {q:"Who started the 'Araya Samajam' in Kerala?",options:["Sree Narayana Guru","Ayyankali","Dr. Palpu","Sahodaran Ayyappan"],answer:0,exp:"Sree Narayana Guru started Araya Samajam"},
-      {q:"The first railway line in Kerala was from?",options:["Thiruvananthapuram to Kollam","Kozhikode to Kannur","Thrissur to Ernakulam","Shoranur to Beypore"],answer:3,exp:"First railway line (1861) was from Shoranur to Beypore"},
-      {q:"Which is the largest lake in Kerala?",options:["Vembanad Lake","Ashtamudi Lake","Sasthamkotta Lake","Pookode Lake"],answer:0,exp:"Vembanad Lake is the longest lake in India"},
-      {q:"The 'Nehru Trophy Boat Race' takes place in which backwater?",options:["Vembanad Lake","Ashtamudi Lake","Sasthamkotta Lake","Punnamada Lake"],answer:3,exp:"Nehru Trophy held at Punnamada Lake, Alappuzha"},
-      {q:"Who was the first Chief Minister of Kerala?",options:["E. M. S. Namboodiripad","Pattom Thanu Pillai","R. Sankar","C. Kesavan"],answer:0,exp:"EMS was the first CM (1957-59)"},
-      {q:"The headquarters of 'Kerala Police' is in?",options:["Thiruvananthapuram","Kochi","Thrissur","Kozhikode"],answer:0,exp:"Kerala Police Headquarters in Thiruvananthapuram"},
-      {q:"Which dance form originated from Kerala?",options:["Kathakali","Bharatanatyam","Kuchipudi","Mohiniyattam"],answer:0,exp:"Kathakali is a major dance form from Kerala"},
-      {q:"The 'Sabarimala' temple is located in which district?",options:["Idukki","Pathanamthitta","Kottayam","Alappuzha"],answer:1,exp:"Sabarimala is in Pathanamthitta district"},
-      {q:"Who is known as the 'Father of Malayalam Literature'?",options:["Thunchaththu Ramanujan Ezhuthachan","Vallathol Narayana Menon","Kumaran Asan","Ulloor S. Parameswara Iyer"],answer:0,exp:"Ezhuthachan is the father of Malayalam language"},
-      {q:"The 'International Film Festival of Kerala' (IFFK) takes place in?",options:["Thrissur","Thiruvananthapuram","Kochi","Kozhikode"],answer:1,exp:"IFFK held annually in Thiruvananthapuram"},
-      {q:"Which is the smallest district in Kerala?",options:["Alappuzha","Kollam","Kannur","Wayanad"],answer:0,exp:"Alappuzha is the smallest district by area"},
-      {q:"'Jawaharlal Nehru Stadium' in Kerala is located at?",options:["Kochi","Kozhikode","Thiruvananthapuram","Kannur"],answer:0,exp:"JLN Stadium is in Kochi (Kaloor)"},
-      {q:"Who composed the Malayalam poem 'Chintavishtayaya Sita'?",options:["Kumaran Asan","Vallathol","Ulloor","Changampuzha"],answer:0,exp:"Kumaran Asan wrote 'Chintavishtayaya Sita'"},
-      {q:"The 'Edakkal Caves' are located in which district?",options:["Wayanad","Idukki","Palakkad","Kottayam"],answer:0,exp:"Edakkal Caves in Wayanad have prehistoric petroglyphs"},
-      {q:"Which is the official language of Kerala?",options:["Malayalam","Tamil","English","Sanskrit"],answer:0,exp:"Malayalam is the official language of Kerala"},
-      {q:"The 'Munnar' hill station is in which district?",options:["Idukki","Wayanad","Pathanamthitta","Thrissur"],answer:0,exp:"Munnar is a famous hill station in Idukki district"},
-      {q:"Who is the current Governor of Kerala (2024)?",options:["Arif Mohammad Khan","P. Sathasivam","N. N. Vohra","R. L. Bhatia"],answer:0,exp:"Arif Mohammad Khan is the Governor since 2019"},
-      {q:"The 'Kuthiran Tunnel' is in which highway?",options:["NH 66","NH 544","NH 183","NH 966"],answer:1,exp:"Kuthiran tunnel on Salem-Kochi Highway (NH 544)"},
-      {q:"Who wrote 'Kerala Samskaram' (Kerala Culture)?",options:["S. K. Pottekkatt","M. T. Vasudevan Nair","K. M. Panikkar","E. M. S. Namboodiripad"],answer:3,exp:"EMS wrote extensively about Kerala culture"},
-      {q:"The 'Kovalam Beach' is located near which city?",options:["Kollam","Thiruvananthapuram","Kochi","Kozhikode"],answer:1,exp:"Kovalam beach is 16 km from Thiruvananthapuram"},
-      {q:"Which is the largest producing district of rubber in Kerala?",options:["Kottayam","Idukki","Pathanamthitta","Kollam"],answer:0,exp:"Kottayam is the largest rubber producer in Kerala"},
-      {q:"'Thiruvathira' is a festival celebrated in which month?",options:["Dhanu","Makaram","Kumbham","Meenam"],answer:0,exp:"Thiruvathira falls in Dhanu (December-January)"},
-      {q:"The 'Kerala High Court' is located in?",options:["Kochi","Ernakulam","Thrissur","Kottayam"],answer:1,exp:"Kerala High Court is in Ernakulam"},
-      {q:"Which is known as the 'Sanskrit Village of Kerala'?",options:["Aranmula","Payyannur","Thiruvananthapuram","Kalady"],answer:0,exp:"Aranmula (Pathanamthitta) is known for Sanskrit learning"}
-    ];
-    
-    const jsonStr = JSON.stringify(fullQuestions, null, 2);
-    const blob = new Blob([jsonStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "psc_30_questions.json";
-    a.click();
-    URL.revokeObjectURL(url);
-    showNotif("Full 30 questions JSON downloaded! 📥");
   }, [showNotif]);
 
   // Styles
@@ -1180,7 +1215,7 @@ export default function App() {
     );
   }
 
-  // Auth screen
+  // Auth screen with forgot password
   if (screen === "auth") {
     return (
       <div style={{ ...styles.container, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, minHeight: "100vh" }}>
@@ -1191,31 +1226,61 @@ export default function App() {
             <h1 style={{ fontSize: 24, fontWeight: 900, background: "linear-gradient(135deg,#a5b4fc,#e879f9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 6 }}>PSC Quiz Kerala</h1>
             <p style={{ color: "#475569", fontSize: 13 }}>Kerala's #1 PSC Exam Preparation App</p>
           </div>
-          <button onClick={loginGoogle} disabled={authLoading} style={{ ...styles.btn("rgba(255,255,255,0.08)", "#e2e8f0"), width: "100%", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, border: "1px solid rgba(255,255,255,0.15)", padding: 16, fontSize: 15, borderRadius: 14 }}>
-            <div style={{ width: 24, height: 24, background: "#fff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#4285f4" }}>G</div>
-            Continue with Google
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-            <span style={{ color: "#334155", fontSize: 12 }}>OR</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-          </div>
-          <div style={{ ...styles.glass(), padding: 22 }}>
-            <div style={{ display: "flex", marginBottom: 16, background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 4 }}>
-              {["login", "register"].map(m => (
-                <button key={m} onClick={() => setAuthMode(m)} style={{ flex: 1, padding: "9px 0", background: authMode === m ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "transparent", border: "none", borderRadius: 10, color: authMode === m ? "#fff" : "#64748b", cursor: "pointer", fontWeight: 700, fontSize: 13, transition: "all 0.2s" }}>
-                  {m === "login" ? "🔐 Login" : "📝 Register"}
+          
+          {!showForgotPassword ? (
+            <>
+              <button onClick={loginGoogle} disabled={authLoading} style={{ ...styles.btn("rgba(255,255,255,0.08)", "#e2e8f0"), width: "100%", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, border: "1px solid rgba(255,255,255,0.15)", padding: 16, fontSize: 15, borderRadius: 14 }}>
+                <div style={{ width: 24, height: 24, background: "#fff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#4285f4" }}>G</div>
+                Continue with Google
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+                <span style={{ color: "#334155", fontSize: 12 }}>OR</span>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+              </div>
+              <div style={{ ...styles.glass(), padding: 22 }}>
+                <div style={{ display: "flex", marginBottom: 16, background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: 4 }}>
+                  {["login", "register"].map(m => (
+                    <button key={m} onClick={() => setAuthMode(m)} style={{ flex: 1, padding: "9px 0", background: authMode === m ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "transparent", border: "none", borderRadius: 10, color: authMode === m ? "#fff" : "#64748b", cursor: "pointer", fontWeight: 700, fontSize: 13, transition: "all 0.2s" }}>
+                      {m === "login" ? "🔐 Login" : "📝 Register"}
+                    </button>
+                  ))}
+                </div>
+                {authMode === "register" && <input value={dn} onChange={e => setDn(e.target.value)} placeholder="Your Name" style={styles.inp} />}
+                <input value={em} onChange={e => setEm(e.target.value)} placeholder="Email address" type="email" style={styles.inp} />
+                <input value={pw} onChange={e => setPw(e.target.value)} placeholder="Password (minimum 6 characters)" type="password" style={styles.inp} />
+                {authErr && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "10px 12px", color: "#ef4444", fontSize: 13, marginBottom: 10 }}>{authErr}</div>}
+                <button onClick={loginEmail} disabled={authLoading} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width: "100%", padding: 14, fontSize: 14, borderRadius: 12, marginBottom: 12 }}>
+                  {authLoading ? "⏳ Please wait..." : authMode === "login" ? "🔐 Sign In" : "✅ Create Account"}
                 </button>
-              ))}
+                
+                {/* Forgot Password Link */}
+                {authMode === "login" && (
+                  <button onClick={() => setShowForgotPassword(true)} style={{ background: "none", border: "none", color: "#6366f1", fontSize: 12, cursor: "pointer", textDecoration: "underline", marginTop: 8 }}>
+                    Forgot Password?
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <div style={{ ...styles.glass(), padding: 22 }}>
+              <h3 style={{ marginBottom: 16, color: "#c7d2fe" }}>Reset Password</h3>
+              <input 
+                value={forgotPasswordEmail} 
+                onChange={e => setForgotPasswordEmail(e.target.value)} 
+                placeholder="Enter your email address" 
+                type="email" 
+                style={styles.inp} 
+              />
+              {forgotPasswordMsg && <div style={{ background: forgotPasswordMsg.includes("✅") ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", border: `1px solid ${forgotPasswordMsg.includes("✅") ? "#10b981" : "#ef4444"}`, borderRadius: 10, padding: "10px 12px", color: forgotPasswordMsg.includes("✅") ? "#10b981" : "#ef4444", fontSize: 13, marginBottom: 10 }}>{forgotPasswordMsg}</div>}
+              <button onClick={handleForgotPassword} disabled={authLoading} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width: "100%", padding: 14, fontSize: 14, borderRadius: 12, marginBottom: 12 }}>
+                {authLoading ? "⏳ Sending..." : "📧 Send Reset Email"}
+              </button>
+              <button onClick={() => { setShowForgotPassword(false); setForgotPasswordMsg(""); setForgotPasswordEmail(""); }} style={{ ...styles.btn("rgba(255,255,255,0.08)", "#94a3b8"), width: "100%", padding: 12, fontSize: 13 }}>
+                ← Back to Login
+              </button>
             </div>
-            {authMode === "register" && <input value={dn} onChange={e => setDn(e.target.value)} placeholder="Your Name" style={styles.inp} />}
-            <input value={em} onChange={e => setEm(e.target.value)} placeholder="Email address" type="email" style={styles.inp} />
-            <input value={pw} onChange={e => setPw(e.target.value)} placeholder="Password (minimum 6 characters)" type="password" style={styles.inp} />
-            {authErr && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "10px 12px", color: "#ef4444", fontSize: 13, marginBottom: 10 }}>{authErr}</div>}
-            <button onClick={loginEmail} disabled={authLoading} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width: "100%", padding: 14, fontSize: 14, borderRadius: 12 }}>
-              {authLoading ? "⏳ Please wait..." : authMode === "login" ? "🔐 Sign In" : "✅ Create Account"}
-            </button>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -1260,7 +1325,7 @@ export default function App() {
 
   return (
     <div style={styles.container}>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}@keyframes pop{from{transform:scale(0.93);opacity:0}to{transform:scale(1);opacity:1}}.pop{animation:pop 0.25s cubic-bezier(.34,1.56,.64,1)}@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}.blink{animation:blink 0.7s infinite}@keyframes slideDown{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}.slideDown{animation:slideDown 0.3s ease}input,select,textarea{font-family:inherit}input:focus,select:focus{outline:none;border-color:#6366f1!important}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#4f46e5;border-radius:3px}`}</style>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}@keyframes pop{from{transform:scale(0.93);opacity:0}to{transform:scale(1);opacity:1}}.pop{animation:pop 0.25s cubic-bezier(.34,1.56,.64,1)}@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}.blink{animation:blink 0.7s infinite}@keyframes slideDown{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}.slideDown{animation:slideDown 0.3s ease}input,select,textarea{font-family:inherit}input:focus,select:focus{outline:none;border-color:#6366f1!important}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#4f46e5;border-radius:3px}.forum-message{border-radius:16px;max-width:85%;word-wrap:break-word}.forum-own{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;margin-left:auto}.forum-other{background:rgba(255,255,255,0.08);color:#e2e8f0}`}</style>
 
       {notif && (
         <div className="slideDown" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 999, background: notif.type === "error" ? "linear-gradient(135deg,#ef4444,#dc2626)" : "linear-gradient(135deg,#10b981,#059669)", color: "#fff", padding: "10px 22px", borderRadius: 30, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", boxShadow: "0 4px 24px rgba(0,0,0,0.5)" }}>
@@ -1270,7 +1335,8 @@ export default function App() {
 
       <Header />
       <div style={{ maxWidth: 500, margin: "0 auto", padding: "0 14px 90px" }}>
-        {/* HOME SCREEN - Same as before */}
+        
+        {/* HOME SCREEN */}
         {screen === "home" && (
           <div className="pop">
             <div style={{ textAlign: "center", padding: "20px 0 16px" }}>
@@ -1333,10 +1399,341 @@ export default function App() {
           </div>
         )}
 
-        {/* QUIZ SCREEN, RESULT SCREEN, BATTLE SCREENS - Same as before */}
-        {/* ... (keep all existing screens, they remain the same) ... */}
+        {/* QUIZ SCREEN */}
+        {screen === "quiz" && questions[curr] && (() => {
+          const q = questions[curr];
+          const catInfo = categories.find(c => c.id === q.cat) || { label: q.cat, icon: "📋", color: "#6366f1" };
+          const pct = Math.round((curr / questions.length) * 100);
+          return (
+            <div className="pop" style={{ paddingTop: 14 }}>
+              <div style={{ ...styles.glass(), padding: "12px 14px", marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div>
+                    <span style={{ color: "#a5b4fc", fontWeight: 700, fontSize: 13 }}>{curr + 1}</span>
+                    <span style={{ color: "#475569", fontSize: 13 }}>/{questions.length}</span>
+                    <span style={{ color: "#64748b", fontSize: 11, marginLeft: 6 }}>{catInfo.icon} {catInfo.label}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 20, padding: "3px 10px", color: "#10b981", fontWeight: 700, fontSize: 12 }}>✅ {score}</div>
+                    <div className={timer <= 5 ? "blink" : ""} style={{ background: timer <= 5 ? "rgba(239,68,68,0.12)" : "rgba(99,102,241,0.12)", border: `1px solid ${timer <= 5 ? "rgba(239,68,68,0.3)" : "rgba(99,102,241,0.3)"}`, borderRadius: 20, padding: "3px 10px", color: timer <= 5 ? "#ef4444" : "#a5b4fc", fontWeight: 800, fontSize: 13 }}>⏱{timer}</div>
+                  </div>
+                </div>
+                <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 5 }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg,${catInfo.color},#a855f7)`, borderRadius: 5, transition: "width 0.5s ease" }} />
+                </div>
+              </div>
 
-        {/* ADMIN SCREEN - Updated with JSON Import */}
+              <div style={{ ...styles.card(), padding: 18, marginBottom: 12, background: `linear-gradient(135deg,${catInfo.color}12,rgba(168,85,247,0.06))`, borderColor: `${catInfo.color}25` }}>
+                <div style={{ fontSize: 10, color: catInfo.color, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700 }}>{catInfo.icon} {catInfo.label}</div>
+                <p style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", lineHeight: 1.65 }}>{q.q}</p>
+                {q.qm && <p style={{ fontSize: 13, color: "#64748b", marginTop: 7, lineHeight: 1.55 }}>{q.qm}</p>}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                {q.options.map((opt, i) => {
+                  let bg = "rgba(255,255,255,0.04)", bdr = "rgba(255,255,255,0.09)", col = "#e2e8f0", icon = "";
+                  if (picked !== null) {
+                    if (i === q.answer) { bg = "rgba(16,185,129,0.14)"; bdr = "#10b981"; col = "#10b981"; icon = "✅"; }
+                    else if (i === picked && picked !== q.answer) { bg = "rgba(239,68,68,0.14)"; bdr = "#ef4444"; col = "#ef4444"; icon = "❌"; }
+                    else { bg = "rgba(255,255,255,0.02)"; col = "#64748b"; }
+                  }
+                  return (
+                    <button key={i} onClick={() => handleAns(i)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 15px", background: bg, border: `1.5px solid ${bdr}`, borderRadius: 12, color: col, textAlign: "left", fontSize: 14, cursor: picked === null ? "pointer" : "default", lineHeight: 1.5, transition: "all 0.2s" }}>
+                      <span style={{ width: 28, height: 28, borderRadius: 8, background: `${bdr}30`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, flexShrink: 0, border: `1px solid ${bdr}` }}>{["A", "B", "C", "D"][i]}</span>
+                      <span style={{ flex: 1 }}>{opt}</span>
+                      {icon && <span style={{ fontSize: 16 }}>{icon}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {picked !== null && (
+                <div className="pop">
+                  {q.explanation && (
+                    <div style={{ ...styles.card(), padding: 12, marginBottom: 10, borderLeft: "3px solid #f59e0b", background: "rgba(245,158,11,0.06)" }}>
+                      <div style={{ fontSize: 11, color: "#f59e0b", marginBottom: 4, fontWeight: 700 }}>💡 Explanation</div>
+                      <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>{q.explanation}</div>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => reportQ(q.id, q.q)} style={{ ...styles.btn("rgba(239,68,68,0.1)", "#ef4444"), padding: "10px 14px", fontSize: 12 }}>🚩 Report</button>
+                    <button onClick={nextQ} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), flex: 1, padding: 12 }}>{curr + 1 >= questions.length ? "📊 See Result →" : "Next Question →"}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* RESULT SCREEN */}
+        {screen === "result" && (
+          <div className="pop" style={{ paddingTop: 18 }}>
+            <BackBtn label="Home" />
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 64, marginBottom: 8, filter: `drop-shadow(0 0 30px ${score >= questions.length * 0.8 ? "#f59e0b" : score >= questions.length * 0.5 ? "#10b981" : "#6366f1"})` }}>{score >= questions.length * 0.8 ? "🏆" : score >= questions.length * 0.5 ? "🎉" : "💪"}</div>
+              <h2 style={{ fontSize: 22, fontWeight: 900, color: "#c7d2fe", marginBottom: 8 }}>Quiz Complete!</h2>
+              <div style={{ fontSize: 52, fontWeight: 900, background: "linear-gradient(135deg,#6366f1,#a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", margin: "8px 0" }}>{score}<span style={{ fontSize: 24, opacity: 0.5 }}>/{questions.length}</span></div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                <div style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 20, padding: "5px 16px", color: "#10b981", fontWeight: 700, fontSize: 13 }}>Accuracy: {Math.round((score / questions.length) * 100)}%</div>
+              </div>
+            </div>
+            <h3 style={{ fontSize: 11, color: "#475569", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>Answer Review</h3>
+            {answers.map((a, i) => (
+              <div key={i} style={{ ...styles.card(), padding: 11, marginBottom: 6, borderLeft: `3px solid ${a.ok ? "#10b981" : "#ef4444"}` }}>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 3 }}>Q{i + 1}: {a.q.q}</div>
+                <div style={{ fontSize: 12, color: a.ok ? "#10b981" : "#ef4444", marginBottom: a.q.explanation && !a.ok ? 4 : 0 }}>{a.ok ? "✅" : "❌"} {a.sel === -1 ? "⏱ Time out" : a.q.options[a.sel]}{!a.ok && a.sel !== -1 && <span style={{ color: "#10b981" }}> → {a.q.options[a.q.answer]}</span>}</div>
+                {a.q.explanation && !a.ok && <div style={{ fontSize: 11, color: "#475569" }}>💡 {a.q.explanation}</div>}
+                <button onClick={() => reportQ(a.q.id, a.q.q)} style={{ fontSize: 10, color: "#ef4444", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 4 }}>🚩 Report</button>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={() => startQuiz(selCat)} style={{ ...styles.btn("rgba(99,102,241,0.15)", "#a5b4fc"), flex: 1 }}>🔄 Again</button>
+              <button onClick={() => { setScreen("home"); setHistory(["home"]); }} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), flex: 1 }}>🏠 Home</button>
+            </div>
+          </div>
+        )}
+
+        {/* BATTLE SELECT SCREEN */}
+        {screen === "battle_select" && (
+          <div className="pop" style={{ paddingTop: 18 }}>
+            <BackBtn />
+            <h2 style={{ fontSize: 20, fontWeight: 900, background: "linear-gradient(135deg,#fca5a5,#f87171)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 4 }}>⚔️ Quiz Battle</h2>
+            <p style={{ color: "#475569", fontSize: 12, marginBottom: 20 }}>Choose your battle mode!</p>
+
+            <div style={{ ...styles.glass(), padding: "12px 14px", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8, fontWeight: 600 }}>📊 Questions per Battle:</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[5, 10, 15, 20].map(n => <button key={n} onClick={() => setQuizCount(n)} style={{ flex: 1, padding: "8px 0", background: quizCount === n ? "linear-gradient(135deg,#ef4444,#f97316)" : "rgba(255,255,255,0.05)", border: `1px solid ${quizCount === n ? "#ef4444" : "rgba(255,255,255,0.1)"}`, borderRadius: 10, color: quizCount === n ? "#fff" : "#64748b", cursor: "pointer", fontWeight: 800, fontSize: 14 }}>{n}</button>)}
+              </div>
+            </div>
+
+            {[
+              { type: "1v1", icon: "🤺", title: "1 vs 1", subtitle: "Challenge your friend with a room code", color: "#6366f1", desc: "Private Battle" },
+              { type: "multi", icon: "👥", title: "Multiplayer", subtitle: "Up to 100 players at the same time!", color: "#10b981", desc: "Up to 100 Players" },
+              { type: "random", icon: "🎲", title: "Random Match", subtitle: "Find random opponent online", color: "#f59e0b", desc: "vs AI if no players" },
+            ].map(b => (
+              <button key={b.type} onClick={() => { setBattleType(b.type); goTo("battle_lobby"); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: "18px 16px", background: `linear-gradient(135deg,${b.color}15,${b.color}08)`, border: `1px solid ${b.color}30`, borderRadius: 16, cursor: "pointer", textAlign: "left", width: "100%", marginBottom: 10, transition: "all 0.2s" }}>
+                <div style={{ width: 52, height: 52, background: `${b.color}20`, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>{b.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, color: "#f1f5f9", fontSize: 16, marginBottom: 3 }}>{b.title}</div>
+                  <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.4 }}>{b.subtitle}</div>
+                </div>
+                <div style={{ background: `${b.color}20`, color: b.color, borderRadius: 20, padding: "4px 10px", fontSize: 10, fontWeight: 700 }}>{b.desc}</div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* BATTLE LOBBY SCREEN */}
+        {screen === "battle_lobby" && (
+          <div className="pop" style={{ paddingTop: 18 }}>
+            <BackBtn />
+            <h2 style={{ fontSize: 19, fontWeight: 900, color: "#c7d2fe", marginBottom: 4 }}>⚔️ {battleType === "1v1" ? "1 vs 1" : battleType === "multi" ? "Multiplayer" : "Random Match"}</h2>
+            <p style={{ color: "#475569", fontSize: 12, marginBottom: 16 }}>{battleType === "random" ? "Find random opponent" : "Create or join a room"}</p>
+
+            {battleType !== "random" && (
+              <>
+                <div style={{ ...styles.card(), padding: 16, marginBottom: 10, borderLeft: "3px solid #6366f1" }}>
+                  <div style={{ fontWeight: 700, color: "#a5b4fc", marginBottom: 8 }}>🆕 Create Room</div>
+                  <button onClick={() => createRoom(battleType)} disabled={battleLoading} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width: "100%" }}>
+                    {battleLoading ? "⏳ Creating..." : "🎮 Create Room"}
+                  </button>
+                </div>
+                <div style={{ ...styles.card(), padding: 16, borderLeft: "3px solid #10b981" }}>
+                  <div style={{ fontWeight: 700, color: "#10b981", marginBottom: 8 }}>🔗 Join Room</div>
+                  <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} placeholder="ROOM CODE" style={{ ...styles.inp, textTransform: "uppercase", letterSpacing: 6, textAlign: "center", fontSize: 22, fontWeight: 900 }} />
+                  {roomErr && <div style={{ color: "#ef4444", fontSize: 12, marginBottom: 8 }}>{roomErr}</div>}
+                  <button onClick={joinRoom} disabled={battleLoading} style={{ ...styles.btn("#10b981"), width: "100%" }}>
+                    {battleLoading ? "⏳ Joining..." : "🚀 Join"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {battleType === "random" && (
+              <div style={{ ...styles.card(), padding: 24, textAlign: "center" }}>
+                {waitingRandom ? (
+                  <>
+                    <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
+                    <h3 style={{ color: "#a5b4fc", marginBottom: 8 }}>Searching for opponent...</h3>
+                    <p style={{ color: "#475569", fontSize: 13, marginBottom: 16 }}>If no player found in 10 seconds, you'll play against AI!</p>
+                    <div style={{ width: 60, height: 4, background: "linear-gradient(90deg,#6366f1,#a855f7)", borderRadius: 4, margin: "0 auto", animation: "load 1.5s ease infinite" }} />
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 48, marginBottom: 12 }}>🎲</div>
+                    <h3 style={{ color: "#c7d2fe", marginBottom: 8 }}>Random Match</h3>
+                    <p style={{ color: "#475569", fontSize: 13, marginBottom: 16 }}>Find random opponent from online players. If no one found, AI opponent!</p>
+                    <button onClick={findRandom} disabled={battleLoading} style={{ ...styles.btn("linear-gradient(135deg,#f59e0b,#ef4444)"), width: "100%", padding: 14, fontSize: 15 }}>
+                      {battleLoading ? "⏳ Finding..." : "🎲 Find Opponent!"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ROOM SCREEN */}
+        {screen === "room" && (
+          <div className="pop" style={{ paddingTop: 14 }}>
+            <BackBtn label="Leave Room" />
+            <div style={{ ...styles.glass(), padding: 20, marginBottom: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, textTransform: "uppercase", letterSpacing: 2, fontWeight: 700 }}>Room Code</div>
+              <div style={{ fontSize: 36, fontWeight: 900, background: "linear-gradient(135deg,#a5b4fc,#e879f9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: 8, margin: "4px 0" }}>{roomCode}</div>
+              <div style={{ fontSize: 11, color: "#475569" }}>Share this code with friends!</div>
+            </div>
+
+            <div style={{ ...styles.card(), padding: 14, marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, color: "#e2e8f0", marginBottom: 10, fontSize: 13 }}>
+                Players ({Object.keys(roomData?.players || {}).length}/{roomData?.maxPlayers || 2})
+              </div>
+              {Object.entries(roomData?.players || {}).map(([uid, p]) => (
+                <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14 }}>{p.isComputer ? "🤖" : p.avatar || "U"}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: uid === user?.uid ? "#a5b4fc" : "#e2e8f0" }}>{p.name} {uid === user?.uid ? "(You)" : ""}</div>
+                    {p.isComputer && <div style={{ fontSize: 10, color: "#f59e0b" }}>AI Opponent • 65% accuracy</div>}
+                  </div>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#10b981" }} />
+                </div>
+              ))}
+            </div>
+
+            {(roomData?.hostUid === user?.uid) && (
+              <button onClick={startBattleGame} disabled={battleLoading} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width: "100%", padding: 14, fontSize: 15, marginBottom: 10 }}>
+                {battleLoading ? "⏳ Starting..." : `🚀 Start Battle! (${Object.keys(roomData?.players || {}).length} players)`}
+              </button>
+            )}
+            {roomData?.hostUid !== user?.uid && <div style={{ textAlign: "center", color: "#475569", fontSize: 13, padding: 14 }}>⏳ Waiting for host to start the battle...</div>}
+          </div>
+        )}
+
+        {/* BATTLE SCREEN */}
+        {screen === "battle" && battleQ[battleCurr] && (() => {
+          const q = battleQ[battleCurr];
+          const players = roomData?.players || {};
+          return (
+            <div className="pop" style={{ paddingTop: 10 }}>
+              <div style={{ ...styles.glass(), padding: "10px 12px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 12, color: "#a5b4fc", fontWeight: 700 }}>Q{battleCurr + 1}/{battleQ.length}</div>
+                <div className={battleTimer <= 5 ? "blink" : ""} style={{ background: battleTimer <= 5 ? "rgba(239,68,68,0.15)" : "rgba(99,102,241,0.15)", border: `1px solid ${battleTimer <= 5 ? "rgba(239,68,68,0.4)" : "rgba(99,102,241,0.3)"}`, borderRadius: 20, padding: "4px 14px", color: battleTimer <= 5 ? "#ef4444" : "#a5b4fc", fontWeight: 900, fontSize: 16 }}>⏱ {battleTimer}</div>
+                <div style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>Score: {battleScore}</div>
+              </div>
+
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                {Object.entries(players).slice(0, 4).map(([uid, p]) => (
+                  <div key={uid} style={{ flex: 1, ...styles.card(), padding: "8px 6px", textAlign: "center", borderTop: `2px solid ${uid === user?.uid ? "#6366f1" : "#ef4444"}` }}>
+                    <div style={{ fontSize: 16, marginBottom: 2 }}>{p.isComputer ? "🤖" : p.avatar || "👤"}</div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: uid === user?.uid ? "#a5b4fc" : "#e2e8f0" }}>{p.score || 0}</div>
+                    <div style={{ fontSize: 9, color: "#475569", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{uid === user?.uid ? "You" : p.name.split(" ")[0]}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ ...styles.card(), padding: 16, marginBottom: 10, background: "rgba(99,102,241,0.07)", borderColor: "rgba(99,102,241,0.15)" }}>
+                <p style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", lineHeight: 1.6 }}>{q.q}</p>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 10 }}>
+                {q.options.map((opt, i) => {
+                  let bg = "rgba(255,255,255,0.04)", bdr = "rgba(255,255,255,0.09)", col = "#e2e8f0";
+                  if (battlePicked !== null) {
+                    if (i === q.answer) { bg = "rgba(16,185,129,0.14)"; bdr = "#10b981"; col = "#10b981"; }
+                    else if (i === battlePicked) { bg = "rgba(239,68,68,0.14)"; bdr = "#ef4444"; col = "#ef4444"; }
+                  }
+                  return (
+                    <button key={i} onClick={() => handleBattleAns(i)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: bg, border: `1.5px solid ${bdr}`, borderRadius: 12, color: col, textAlign: "left", fontSize: 13, cursor: battlePicked === null ? "pointer" : "default", transition: "all 0.2s" }}>
+                      <span style={{ width: 26, height: 26, borderRadius: 8, background: `${bdr}30`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 11, flexShrink: 0 }}>{["A", "B", "C", "D"][i]}</span>{opt}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {battlePicked !== null && <button onClick={nextBattle} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width: "100%", padding: 12, marginBottom: 10 }}>{battleCurr + 1 >= battleQ.length ? "🏆 See Results" : "Next →"}</button>}
+
+              <div style={{ ...styles.card(), padding: 12 }}>
+                <div style={{ fontWeight: 700, color: "#64748b", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>💬 Battle Chat</div>
+                <div style={{ height: 80, overflowY: "auto", marginBottom: 8 }}>
+                  {chatMessages.length === 0 && <div style={{ color: "#334155", fontSize: 11, textAlign: "center", padding: "10px 0" }}>No messages yet...</div>}
+                  {chatMessages.map((m, i) => (
+                    <div key={i} style={{ fontSize: 11, marginBottom: 4, color: m.uid === user?.uid ? "#a5b4fc" : "#94a3b8" }}>
+                      <strong>{m.uid === user?.uid ? "You" : m.name}:</strong> {m.msg}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} placeholder="Message..." style={{ ...styles.inp, marginBottom: 0, flex: 1, padding: "8px 12px", fontSize: 12 }} />
+                  <button onClick={sendChat} style={{ ...styles.btn("rgba(99,102,241,0.2)", "#a5b4fc"), padding: "8px 12px", fontSize: 12 }}>Send</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* BATTLE RESULT SCREEN */}
+        {screen === "battle_result" && (
+          <div className="pop" style={{ paddingTop: 18, textAlign: "center" }}>
+            <div style={{ fontSize: 64, marginBottom: 12 }}>🏆</div>
+            <h2 style={{ fontSize: 22, fontWeight: 900, color: "#c7d2fe", marginBottom: 16 }}>Battle Over!</h2>
+            <div style={{ ...styles.card(), padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, color: "#e2e8f0", marginBottom: 12 }}>Final Scores</div>
+              {Object.entries(roomData?.players || {}).sort((a, b) => b[1].score - a[1].score).map(([uid, p], i) => (
+                <div key={uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                  <span style={{ fontSize: 20, width: 28 }}>{i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}</span>
+                  <div style={{ flex: 1, textAlign: "left", fontWeight: 700, color: uid === user?.uid ? "#a5b4fc" : "#e2e8f0" }}>{p.name} {uid === user?.uid ? "(You)" : ""}</div>
+                  <div style={{ fontWeight: 900, color: "#6366f1", fontSize: 20 }}>{p.score || 0}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { cleanupRoomListeners(); goTo("battle_select"); }} style={{ ...styles.btn("rgba(99,102,241,0.15)", "#a5b4fc"), flex: 1 }}>🔄 Play Again</button>
+              <button onClick={() => { cleanupRoomListeners(); setScreen("home"); setHistory(["home"]); }} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), flex: 1 }}>🏠 Home</button>
+            </div>
+          </div>
+        )}
+
+        {/* CONTRIBUTE SCREEN */}
+        {screen === "contribute" && (
+          <div className="pop" style={{ paddingTop: 16 }}>
+            <BackBtn />
+            <h2 style={{ fontSize: 19, fontWeight: 900, color: "#10b981", marginBottom: 4 }}>✍️ Contribute a Question</h2>
+            <p style={{ color: "#475569", fontSize: 12, marginBottom: 14 }}>Submit → Admin reviews → Published to all users! 🎉</p>
+
+            {myContributions.length > 0 && (
+              <div style={{ ...styles.glass(), padding: 12, marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: "#e2e8f0", marginBottom: 8 }}>My Submissions ({myContributions.length})</div>
+                {myContributions.slice(0, 3).map((c, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <div style={{ flex: 1, fontSize: 12, color: "#94a3b8" }}>{c.q?.substring(0, 35)}...</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: c.status === "approved" ? "rgba(16,185,129,0.15)" : c.status === "rejected" ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.15)", color: c.status === "approved" ? "#10b981" : c.status === "rejected" ? "#ef4444" : "#f59e0b" }}>
+                      {c.status === "approved" ? "✅" : c.status === "rejected" ? "❌" : "⏳"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ ...styles.card(), padding: 16, borderLeft: "3px solid #10b981" }}>
+              <input value={contributeQ.q} onChange={e => setContributeQ({ ...contributeQ, q: e.target.value })} placeholder="Question (English) *" style={styles.inp} />
+              <input value={contributeQ.qm} onChange={e => setContributeQ({ ...contributeQ, qm: e.target.value })} placeholder="Question (Malayalam) — Optional" style={styles.inp} />
+              {["o1", "o2", "o3", "o4"].map((k, i) => <input key={k} value={contributeQ[k]} onChange={e => setContributeQ({ ...contributeQ, [k]: e.target.value })} placeholder={`Option ${["A", "B", "C", "D"][i]} *`} style={styles.inp} />)}
+              <input value={contributeQ.explanation} onChange={e => setContributeQ({ ...contributeQ, explanation: e.target.value })} placeholder="💡 Explanation (Why is this the answer?)" style={styles.inp} />
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                <select value={contributeQ.answer} onChange={e => setContributeQ({ ...contributeQ, answer: e.target.value })} style={{ ...styles.sel, flex: 1, marginBottom: 0 }}>
+                  <option value="0">✅ Answer: A</option><option value="1">✅ Answer: B</option><option value="2">✅ Answer: C</option><option value="3">✅ Answer: D</option>
+                </select>
+                <select value={contributeQ.cat} onChange={e => setContributeQ({ ...contributeQ, cat: e.target.value })} style={{ ...styles.sel, flex: 1, marginBottom: 0 }}>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
+                </select>
+              </div>
+              {contribStatus && <div style={{ fontSize: 13, marginBottom: 10, color: contribStatus.includes("✅") ? "#10b981" : "#ef4444" }}>{contribStatus}</div>}
+              <button onClick={submitContribution} style={{ ...styles.btn("linear-gradient(135deg,#10b981,#06b6d4)"), width: "100%", padding: 13, fontSize: 14 }}>✍️ Submit for Review</button>
+            </div>
+          </div>
+        )}
+
+        {/* ADMIN SCREEN */}
         {screen === "admin" && isAdmin && (
           <div className="pop" style={{ paddingTop: 16 }}>
             <BackBtn />
@@ -1356,7 +1753,7 @@ export default function App() {
               ))}
             </div>
 
-            {/* JSON IMPORT TAB - NEW! */}
+            {/* JSON IMPORT TAB */}
             {adminTab === "json" && (
               <div style={{ ...styles.card(), padding: 20, borderLeft: "3px solid #10b981" }}>
                 <div style={{ fontWeight: 700, color: "#10b981", marginBottom: 10, fontSize: 16 }}>📦 JSON File Import</div>
@@ -1389,12 +1786,6 @@ export default function App() {
     "options": ["Thiruvananthapuram", "Kollam", "Kottayam", "Pathanamthitta"],
     "answer": 2,
     "explanation": "Kottayam is the first district to achieve 100% literacy"
-  },
-  {
-    "q": "Who wrote 'Aadujeevitham'?",
-    "options": ["M. T. Vasudevan Nair", "Benyamin", "S. K. Pottekkatt", "Vaikom Muhammad Basheer"],
-    "answer": 1,
-    "explanation": "Benyamin wrote the award-winning novel"
   }
 ]`}
                   </pre>
@@ -1403,9 +1794,6 @@ export default function App() {
                 <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
                   <button onClick={downloadSampleJSON} style={{ ...styles.btn("rgba(99,102,241,0.2)", "#a5b4fc"), flex: 1, padding: "10px" }}>
                     📄 Download Sample JSON
-                  </button>
-                  <button onClick={downloadFullJSON} style={{ ...styles.btn("rgba(16,185,129,0.2)", "#10b981"), flex: 1, padding: "10px" }}>
-                    🎯 Download 30 Questions JSON
                   </button>
                 </div>
                 
@@ -1420,7 +1808,6 @@ export default function App() {
                   <label htmlFor="jsonFileInput" style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 48 }}>📁</span>
                     <span style={{ color: "#10b981", fontWeight: 700 }}>Click to select JSON file</span>
-                    <span style={{ fontSize: 11, color: "#475569" }}>or drag and drop</span>
                   </label>
                 </div>
                 
@@ -1553,12 +1940,13 @@ export default function App() {
           </div>
         )}
 
-        {/* FORUM SCREEN - Same as before */}
+        {/* FORUM SCREEN - WhatsApp Style */}
         {screen === "forum" && (
           <div className="pop" style={{ paddingTop: 16 }}>
             <h2 style={{ fontSize: 19, fontWeight: 900, background: "linear-gradient(135deg,#a5b4fc,#e879f9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 4 }}>💬 Discussion Forum</h2>
             <p style={{ color: "#475569", fontSize: 12, marginBottom: 14 }}>PSC students community • Share knowledge, ask doubts!</p>
 
+            {/* Category Filter */}
             <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 14 }}>
               {[{ id: "all", label: "All", icon: "🌐", color: "#6366f1" }, ...FORUM_CATS].map(cat => (
                 <button key={cat.id} onClick={() => setForumCategory(cat.id)} style={{ flexShrink: 0, padding: "6px 12px", background: forumCategory === cat.id ? `${cat.color}30` : "rgba(255,255,255,0.05)", border: `1px solid ${forumCategory === cat.id ? cat.color : "rgba(255,255,255,0.1)"}`, borderRadius: 20, color: forumCategory === cat.id ? cat.color : "#64748b", cursor: "pointer", fontWeight: 700, fontSize: 11, whiteSpace: "nowrap" }}>
@@ -1567,70 +1955,135 @@ export default function App() {
               ))}
             </div>
 
+            {/* New Post Box */}
             <div style={{ ...styles.glass(), padding: 14, marginBottom: 14 }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15, flexShrink: 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 20, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
                   {(user?.displayName || user?.email || "U")[0].toUpperCase()}
                 </div>
                 <textarea
                   value={forumMsg}
                   onChange={e => setForumMsg(e.target.value)}
-                  placeholder="Share your thoughts, ask a doubt, post study tips..."
-                  rows={3}
-                  style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 12px", color: "#e2e8f0", fontSize: 13, fontFamily: "inherit", resize: "none", outline: "none" }}
+                  placeholder="Type your message here..."
+                  rows={2}
+                  style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "12px 16px", color: "#e2e8f0", fontSize: 14, fontFamily: "inherit", resize: "none", outline: "none" }}
                 />
               </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <select value={forumCategory === "all" ? "general" : forumCategory} onChange={e => setForumCategory(e.target.value)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "6px 10px", color: "#94a3b8", fontSize: 12, fontFamily: "inherit", outline: "none" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                <select value={forumCategory === "all" ? "general" : forumCategory} onChange={e => setForumCategory(e.target.value)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "6px 12px", color: "#94a3b8", fontSize: 12, fontFamily: "inherit", outline: "none" }}>
                   {FORUM_CATS.map(c => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
                 </select>
-                <button onClick={sendForumPost} disabled={!forumMsg.trim()} style={{ background: forumMsg.trim() ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(255,255,255,0.06)", color: forumMsg.trim() ? "#fff" : "#475569", border: "none", borderRadius: 10, padding: "8px 18px", cursor: forumMsg.trim() ? "pointer" : "default", fontWeight: 700, fontSize: 13, fontFamily: "inherit", transition: "all 0.2s" }}>
-                  Post 💬
+                <button onClick={sendForumPost} disabled={!forumMsg.trim()} style={{ background: forumMsg.trim() ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(255,255,255,0.06)", color: forumMsg.trim() ? "#fff" : "#475569", border: "none", borderRadius: 20, padding: "8px 20px", cursor: forumMsg.trim() ? "pointer" : "default", fontWeight: 600, fontSize: 13, fontFamily: "inherit", transition: "all 0.2s" }}>
+                  Send 📤
                 </button>
               </div>
             </div>
 
+            {/* Posts - WhatsApp Style Chat */}
             {!forumLoaded && <div style={{ textAlign: "center", padding: 20, color: "#475569" }}>Loading...</div>}
             {forumLoaded && forumPosts.length === 0 && <div style={{ ...styles.card(), padding: 40, textAlign: "center", color: "#475569" }}><div style={{ fontSize: 40 }}>💬</div><p style={{ marginTop: 10 }}>No posts yet! Be the first to post!</p></div>}
-            {forumPosts
-              .filter(p => forumCategory === "all" || p.category === forumCategory)
-              .map(post => {
-                const catInfo = FORUM_CATS.find(c => c.id === post.category) || { icon: "💬", color: "#6366f1", label: "General" };
-                const isOwn = post.uid === user?.uid;
-                const timeAgo = (ts) => {
-                  const diff = Date.now() - ts;
-                  if (diff < 60000) return "just now";
-                  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-                  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-                  return `${Math.floor(diff / 86400000)}d ago`;
-                };
-                return (
-                  <div key={post.id} style={{ ...styles.card(), padding: 14, marginBottom: 10, borderLeft: `3px solid ${catInfo.color}` }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${catInfo.color},${catInfo.color}aa)`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15, flexShrink: 0 }}>
-                        {post.avatar || post.name[0].toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                          <span style={{ fontWeight: 700, fontSize: 13, color: isOwn ? "#a5b4fc" : "#e2e8f0" }}>{post.name} {isOwn ? "(You)" : ""}</span>
-                          <span style={{ fontSize: 10, background: `${catInfo.color}20`, color: catInfo.color, padding: "1px 7px", borderRadius: 20, fontWeight: 700 }}>{catInfo.icon} {catInfo.label}</span>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {forumPosts
+                .filter(p => forumCategory === "all" || p.category === forumCategory)
+                .map(post => {
+                  const catInfo = FORUM_CATS.find(c => c.id === post.category) || { icon: "💬", color: "#6366f1", label: "General" };
+                  const isOwn = post.uid === user?.uid;
+                  const timeAgo = (ts) => {
+                    const diff = Date.now() - ts;
+                    if (diff < 60000) return "just now";
+                    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+                    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+                    return `${Math.floor(diff / 86400000)}d ago`;
+                  };
+                  
+                  return (
+                    <div key={post.id} style={{ display: "flex", justifyContent: isOwn ? "flex-end" : "flex-start", marginBottom: 8 }}>
+                      <div style={{ maxWidth: "85%", width: "auto" }}>
+                        {/* Message Bubble */}
+                        <div style={{
+                          background: isOwn ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(255,255,255,0.08)",
+                          borderRadius: 20,
+                          borderTopRightRadius: isOwn ? 4 : 20,
+                          borderTopLeftRadius: isOwn ? 20 : 4,
+                          padding: "10px 14px",
+                          marginBottom: 4
+                        }}>
+                          {!isOwn && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                              <div style={{ width: 24, height: 24, borderRadius: 12, background: `linear-gradient(135deg,${catInfo.color},${catInfo.color}aa)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
+                                {post.avatar || post.name[0].toUpperCase()}
+                              </div>
+                              <span style={{ fontWeight: 700, fontSize: 12, color: "#a5b4fc" }}>{post.name}</span>
+                              <span style={{ fontSize: 9, background: `${catInfo.color}20`, color: catInfo.color, padding: "2px 8px", borderRadius: 12, fontWeight: 600 }}>{catInfo.label}</span>
+                            </div>
+                          )}
+                          {isOwn && (
+                            <div style={{ fontSize: 10, color: "#a5b4fc", marginBottom: 4, textAlign: "right" }}>You</div>
+                          )}
+                          <p style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.5, wordWrap: "break-word", margin: 0 }}>{post.msg}</p>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: isOwn ? "flex-end" : "flex-start", gap: 8, marginTop: 6 }}>
+                            <span style={{ fontSize: 10, color: "#64748b" }}>{timeAgo(post.time)}</span>
+                            <button onClick={() => likePost(post)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", gap: 3 }}>
+                              👍 {post.likes || 0}
+                            </button>
+                            <button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 11 }}>
+                              💬 Reply
+                            </button>
+                            {(isOwn || isAdmin) && (
+                              <button onClick={() => deleteForumPost(post.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 11 }}>
+                                🗑️
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 10, color: "#475569" }}>{timeAgo(post.time)}</div>
+                        
+                        {/* Replies */}
+                        {post.replies && post.replies.length > 0 && (
+                          <div style={{ marginLeft: isOwn ? 0 : 40, marginTop: 4, marginBottom: 4 }}>
+                            {post.replies.map((reply, idx) => (
+                              <div key={idx} style={{
+                                background: reply.uid === user?.uid ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.04)",
+                                borderRadius: 16,
+                                padding: "8px 12px",
+                                marginBottom: 6,
+                                marginLeft: reply.uid === user?.uid ? "auto" : 0,
+                                marginRight: reply.uid === user?.uid ? 0 : "auto",
+                                maxWidth: "90%",
+                                width: "fit-content"
+                              }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                                  <span style={{ fontWeight: 600, fontSize: 11, color: reply.uid === user?.uid ? "#a5b4fc" : "#94a3b8" }}>
+                                    {reply.uid === user?.uid ? "You" : reply.name}
+                                  </span>
+                                  <span style={{ fontSize: 9, color: "#475569" }}>{timeAgo(reply.time)}</span>
+                                </div>
+                                <p style={{ fontSize: 12, color: "#cbd5e1", margin: 0 }}>{reply.msg}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Reply Input */}
+                        {replyingTo === post.id && (
+                          <div style={{ marginTop: 8, marginLeft: isOwn ? 0 : 40, display: "flex", gap: 8 }}>
+                            <input
+                              value={replyMsg}
+                              onChange={e => setReplyMsg(e.target.value)}
+                              placeholder="Write a reply..."
+                              style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "8px 14px", color: "#e2e8f0", fontSize: 12, outline: "none" }}
+                              onKeyPress={e => e.key === "Enter" && sendReply(post.id)}
+                            />
+                            <button onClick={() => sendReply(post.id)} style={{ ...styles.btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), padding: "8px 16px", fontSize: 12 }}>
+                              Send
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {(isOwn || isAdmin) && (
-                        <button onClick={() => deleteForumPost(post.id)} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "4px 8px", color: "#ef4444", cursor: "pointer", fontSize: 11 }}>🗑️</button>
-                      )}
                     </div>
-                    <p style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.6, marginBottom: 10 }}>{post.msg}</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <button onClick={() => likePost(post)} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20, padding: "4px 12px", color: "#64748b", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>
-                        👍 {post.likes || 0}
-                      </button>
-                      <span style={{ fontSize: 11, color: "#334155" }}>💬 PSC Quiz Kerala</span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+            </div>
           </div>
         )}
 
@@ -1804,25 +2257,3 @@ function MembersPanel({ db, activeMembers }) {
     </div>
   );
 }
-```
-
-🎯 What's New - JSON Import Feature
-
-1. New "📦 JSON Import" tab in Admin Panel
-2. Download Sample JSON button - get template
-3. Download 30 Questions JSON button - ready to use!
-4. Select Category & Difficulty before import
-5. Upload JSON file - click or drag & drop
-6. Real-time import status with success/error messages
-
-📝 How to Use
-
-1. Go to Admin Panel → 📦 JSON Import tab
-2. Click "Download 30 Questions JSON" button
-3. Save the JSON file
-4. Select Category (LDC / LGS)
-5. Select Difficulty (Easy)
-6. Click the upload area and select the JSON file
-7. Wait for success message - "✅ Successfully imported 30 questions!"
-
-This is the simplest and most reliable method - no Google Sheets, no CSV, just one JSON file! 🚀
