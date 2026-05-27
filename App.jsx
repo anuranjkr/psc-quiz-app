@@ -80,7 +80,7 @@ export default function PSCQuizApp() {
     const id = savedSheetId;
     if (!id || id === "YOUR_GOOGLE_SHEET_ID_HERE") return;
     setSheetStatus("loading");
-    const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:json&sheet=Questions`;
+    const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:json&sheet=Sheet1`;
     fetch(url)
       .then(r => r.text())
       .then(raw => {
