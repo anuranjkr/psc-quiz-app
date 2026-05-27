@@ -271,11 +271,37 @@ export default function App() {
     goTo("room");
   };
 
+  // ✅ Auto-start: Firebase status "playing" ആയാൽ all devices automatically battle-ലേക്ക് പോകും
+  useEffect(() => {
+    if (!roomCode) return;
+    const roomRef = ref(db, `rooms/${roomCode}`);
+    const unsub = onValue(roomRef, (snap) => {
+      if (!snap.exists()) return;
+      const room = snap.val();
+      if (room.status === "playing" && (screen === "room" || screen === "battle_lobby")) {
+        if (room.questions) {
+          const qs = Object.values(room.questions);
+          setBattleQ(qs);
+        }
+        setBattleCurr(0);
+        setBattlePicked(null);
+        setBattleScore(0);
+        setBattleStarted(true);
+        setScreen("battle");
+        setHistory(h => [...h, "battle"]);
+      }
+    });
+    return () => unsub();
+  }, [roomCode]);
+
   const startBattleGame = async () => {
     if (!roomCode) return;
+    // Firebase status "playing" ആക്കുന്നു — all devices auto-start
     await update(ref(db,`rooms/${roomCode}`),{ status:"playing", startedAt:serverTimestamp() });
+    // Host device locally start
+    if (roomData?.questions) setBattleQ(Object.values(roomData.questions));
     setBattleCurr(0); setBattlePicked(null); setBattleScore(0); setBattleStarted(true);
-    goTo("battle");
+    setScreen("battle"); setHistory(h => [...h, "battle"]);
   };
 
   const handleBattleAns = async (i) => {
