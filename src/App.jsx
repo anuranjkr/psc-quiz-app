@@ -86,6 +86,11 @@ export default function App() {
   const [battleType, setBattleType] = useState(null); // "1v1"|"multi"|"random"
   const [roomCode, setRoomCode] = useState(""); const [joinCode, setJoinCode] = useState("");
   const [roomData, setRoomData] = useState(null); const [roomErr, setRoomErr] = useState("");
+  // Forum
+  const [forumPosts, setForumPosts] = useState([]);
+  const [forumMsg, setForumMsg] = useState("");
+  const [forumCategory, setForumCategory] = useState("general");
+  const [forumLoaded, setForumLoaded] = useState(false);
   const [battleQ, setBattleQ] = useState([]); const [battleCurr, setBattleCurr] = useState(0);
   const [battlePicked, setBattlePicked] = useState(null); const [battleScore, setBattleScore] = useState(0);
   const [battleTimer, setBattleTimer] = useState(20); const battleTimerRef = useRef(null);
@@ -132,6 +137,9 @@ export default function App() {
     onValue(ref(db,`users/${uid}/contributions`),(snap)=>{ if(snap.exists()){ const d=[]; snap.forEach(c=>d.push({id:c.key,...c.val()})); setMyContributions(d); } });
     // Active members count
     onValue(ref(db,"online"),(snap)=>{ setActiveMembers(snap.exists()?snap.size:0); });
+    // Forum posts
+    const forumQ = query(ref(db,"forum"), orderByChild("time"), limitToLast(100));
+    onValue(forumQ,(snap)=>{ if(snap.exists()){ const d=[]; snap.forEach(c=>d.push({id:c.key,...c.val()})); setForumPosts(d.reverse()); } setForumLoaded(true); });
     if (admin) {
       onValue(ref(db,"pending_questions"),(snap)=>{ const d=[]; if(snap.exists()) snap.forEach(c=>d.push({id:c.key,...c.val()})); setPendingQ(d); });
       onValue(ref(db,"adminEmails"),(snap)=>{ if(snap.exists()){ const d=[]; snap.forEach(c=>d.push({key:c.key,email:c.key.replace(/_/g,".")})); setAdminList(d); } });
@@ -304,16 +312,26 @@ export default function App() {
     setScreen("battle"); setHistory(h => [...h, "battle"]);
   };
 
-  const handleBattleAns = async (i) => {
-    if (battlePicked!==null) return; clearInterval(battleTimerRef.current);
+  const handleBattleAns = (i) => {
+    if (battlePicked!==null) return;
+    clearInterval(battleTimerRef.current);
     setBattlePicked(i);
     const q = battleQ[battleCurr];
-    const ok = q && i===q.answer;
-    if (ok) { setBattleScore(s=>s+1); await update(ref(db,`rooms/${roomCode}/players/${user.uid}`),{ score: increment(1) }); }
-    // Computer AI answer
-    if (roomData?.players?.computer && q) {
+    if (!q) return;
+    const ok = i === q.answer;
+    // Local score update immediately (no delay)
+    const newScore = ok ? battleScore + 1 : battleScore;
+    if (ok) setBattleScore(newScore);
+    // Firebase exact score set (fixes increment bug)
+    set(ref(db,`rooms/${roomCode}/players/${user.uid}/score`), newScore);
+    // Computer AI - background, no await
+    if (roomData?.players?.computer) {
       const compAns = computerAnswer(q);
-      setTimeout(async()=>{ await update(ref(db,`rooms/${roomCode}/players/computer`),{ score: compAns===q.answer?increment(1):increment(0) }); },800+Math.random()*1200);
+      const compOk = compAns === q.answer;
+      const curComp = roomData?.players?.computer?.score || 0;
+      setTimeout(()=>{
+        set(ref(db,`rooms/${roomCode}/players/computer/score`), compOk ? curComp + 1 : curComp);
+      }, 600 + Math.random()*1000);
     }
   };
 
@@ -327,6 +345,41 @@ export default function App() {
     await push(ref(db,`rooms/${roomCode}/chat`),{ uid:user.uid, name:user.displayName||user.email.split("@")[0], msg:chatMsg.trim(), time:Date.now() });
     setChatMsg("");
   };
+
+  const sendForumPost = async () => {
+    if (!forumMsg.trim()) return;
+    await push(ref(db,"forum"),{
+      uid: user.uid,
+      name: user.displayName || user.email.split("@")[0],
+      avatar: (user.displayName || user.email)[0].toUpperCase(),
+      msg: forumMsg.trim(),
+      category: forumCategory,
+      time: Date.now(),
+      likes: 0,
+    });
+    setForumMsg("");
+  };
+
+  const deleteForumPost = async (postId) => {
+    await remove(ref(db,`forum/${postId}`));
+    showNotif("Post deleted!","error");
+  };
+
+  const likePost = async (post) => {
+    const liked = JSON.parse(localStorage.getItem(`liked_${post.id}`) || "false");
+    if (liked) return;
+    await update(ref(db,`forum/${post.id}`),{ likes: (post.likes||0) + 1 });
+    localStorage.setItem(`liked_${post.id}`, "true");
+  };
+
+  const FORUM_CATS = [
+    { id:"general", label:"General", icon:"💬", color:"#6366f1" },
+    { id:"ldc", label:"LDC Tips", icon:"📋", color:"#8b5cf6" },
+    { id:"current", label:"Current Affairs", icon:"📰", color:"#ef4444" },
+    { id:"doubt", label:"Doubts", icon:"🤔", color:"#f59e0b" },
+    { id:"resources", label:"Resources", icon:"📚", color:"#10b981" },
+    { id:"motivation", label:"Motivation", icon:"🔥", color:"#06b6d4" },
+  ];
 
   // Report question
   const reportQ = async (qId, qText) => {
@@ -482,7 +535,7 @@ export default function App() {
   // Bottom Nav
   const BottomNav = () => (
     <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(5,5,15,0.95)",backdropFilter:"blur(20px)",borderTop:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-around",padding:"8px 0 12px",zIndex:100}}>
-      {[["home","🏠","Home"],["contribute","✍️","Contribute"],["battle_select","⚔️","Battle"],["leaderboard","🏆","Ranks"],["myprogress","📊","Progress"]].map(([s,icon,label])=>(
+      {[["home","🏠","Home"],["contribute","✍️","Contribute"],["battle_select","⚔️","Battle"],["forum","💬","Forum"],["myprogress","📊","Progress"]].map(([s,icon,label])=>(
         <button key={s} onClick={()=>goTo(s)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 12px",background:"none",border:"none",cursor:"pointer",color:screen===s?"#a5b4fc":"#475569",transition:"color 0.2s"}}>
           <span style={{fontSize:20}}>{icon}</span>
           <span style={{fontSize:9,fontWeight:700,letterSpacing:0.5}}>{label}</span>
@@ -503,7 +556,7 @@ export default function App() {
     <div style={{background:"linear-gradient(135deg,rgba(19,16,58,0.95),rgba(30,27,75,0.95))",backdropFilter:"blur(20px)",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(99,102,241,0.2)",position:"sticky",top:0,zIndex:100}}>
       <div onClick={()=>goTo("home")} style={{cursor:"pointer"}}>
         <div style={{fontSize:15,fontWeight:800,background:"linear-gradient(135deg,#a5b4fc,#e879f9)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🎓 PSC Quiz Kerala</div>
-        <div style={{fontSize:10,color:"#4f46e5",marginTop:1}}>Hi, {user?.displayName||user?.email?.split("@")[0]}! {isSuperAdmin?"👑":isAdmin?"🛡️":""} • 🟢 {activeMembers} Online</div>
+        <div style={{fontSize:10,color:"#4f46e5",marginTop:1}}>Hi, {user?.displayName||user?.email?.split("@")[0]}! {isSuperAdmin?"👑":isAdmin?"🛡️":""}</div>
       </div>
       <div style={{display:"flex",gap:5}}>
         {isAdmin&&<button onClick={()=>goTo("admin")} style={{...Btn("rgba(251,191,36,0.15)","#fbbf24"),padding:"6px 10px",fontSize:12,position:"relative"}}>
@@ -535,7 +588,7 @@ export default function App() {
 
             {/* Stats */}
             <div style={{display:"flex",gap:8,marginBottom:16}}>
-              {[{l:"Questions",v:allQ.length,i:"📝",c:"#6366f1"},{l:"Online",v:activeMembers,i:"🟢",c:"#10b981"},{l:"My Best",v:Object.values(myStats).reduce((a,s)=>Math.max(a,s.best||0),0),i:"🏆",c:"#f59e0b"}].map((x,i)=>(
+              {[{l:"Questions",v:allQ.length,i:"📝",c:"#6366f1"},{l:"Categories",v:categories.length,i:"📚",c:"#8b5cf6"},{l:"My Best",v:Object.values(myStats).reduce((a,s)=>Math.max(a,s.best||0),0),i:"🏆",c:"#f59e0b"}].map((x,i)=>(
                 <div key={i} style={{...card(),flex:1,padding:"12px 6px",textAlign:"center",borderTop:`2px solid ${x.c}`}}>
                   <div style={{fontSize:20,marginBottom:2}}>{x.i}</div>
                   <div style={{fontSize:22,fontWeight:900,color:x.c}}>{x.v}</div>
@@ -618,7 +671,7 @@ export default function App() {
 
               {/* Question */}
               <div style={{...card(),padding:18,marginBottom:12,background:`linear-gradient(135deg,${catInfo.color}12,rgba(168,85,247,0.06))`,borderColor:`${catInfo.color}25`}}>
-                <div style={{fontSize:10,color:catInfo.color,marginBottom:8,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700}}>{catInfo.icon} {catInfo.label} • {q.difficulty||"medium"}</div>
+                <div style={{fontSize:10,color:catInfo.color,marginBottom:8,textTransform:"uppercase",letterSpacing:1.5,fontWeight:700}}>{catInfo.icon} {catInfo.label}</div>
                 <p style={{fontSize:16,fontWeight:700,color:"#f1f5f9",lineHeight:1.65}}>{q.q}</p>
                 {q.qm&&<p style={{fontSize:13,color:"#64748b",marginTop:7,lineHeight:1.55}}>{q.qm}</p>}
               </div>
@@ -912,7 +965,7 @@ export default function App() {
                   <option value="0">✅ Answer: A</option><option value="1">✅ Answer: B</option><option value="2">✅ Answer: C</option><option value="3">✅ Answer: D</option>
                 </select>
                 <select value={contributeQ.cat} onChange={e=>setContributeQ({...contributeQ,cat:e.target.value})} style={{...Sel,flex:1,marginBottom:0}}>{categories.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}</select>
-                <select value={contributeQ.difficulty} onChange={e=>setContributeQ({...contributeQ,difficulty:e.target.value})} style={{...Sel,flex:1,marginBottom:0}}><option value="easy">🟢 Easy</option><option value="medium">🟡 Medium</option><option value="hard">🔴 Hard</option></select>
+
               </div>
               {contribStatus&&<div style={{fontSize:13,marginBottom:10,color:contribStatus.includes("✅")?"#10b981":"#ef4444"}}>{contribStatus}</div>}
               <button onClick={submitContribution} style={{...Btn("linear-gradient(135deg,#10b981,#06b6d4)"),width:"100%",padding:13,fontSize:14}}>✍️ Submit for Review</button>
@@ -946,7 +999,7 @@ export default function App() {
                   ?<div style={{...card(),padding:40,textAlign:"center",color:"#475569"}}><div style={{fontSize:40}}>✅</div><p style={{marginTop:10}}>No pending questions!</p></div>
                   :pendingQ.map(pq=>(
                     <div key={pq.id} style={{...card(),padding:14,marginBottom:10,borderLeft:"3px solid #f59e0b"}}>
-                      <div style={{fontSize:10,color:"#f59e0b",marginBottom:6,fontWeight:700}}>⏳ By: {pq.submittedByName} • {categories.find(c=>c.id===pq.cat)?.label||pq.cat} • {pq.difficulty}</div>
+                      <div style={{fontSize:10,color:"#f59e0b",marginBottom:6,fontWeight:700}}>⏳ By: {pq.submittedByName} • {categories.find(c=>c.id===pq.cat)?.label||pq.cat}</div>
                       <p style={{fontSize:14,fontWeight:700,color:"#f1f5f9",marginBottom:8}}>{pq.q}</p>
                       {pq.qm&&<p style={{fontSize:12,color:"#64748b",marginBottom:8}}>{pq.qm}</p>}
                       {pq.options.map((o,i)=><div key={i} style={{fontSize:12,color:i===pq.answer?"#10b981":"#94a3b8",padding:"3px 0"}}>{["A","B","C","D"][i]}. {o} {i===pq.answer?"✅":""}</div>)}
@@ -979,7 +1032,7 @@ export default function App() {
                 <div style={{display:"flex",gap:6,marginBottom:10}}>
                   <select value={newQ.answer} onChange={e=>setNewQ({...newQ,answer:e.target.value})} style={{...Sel,flex:1,marginBottom:0}}><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select>
                   <select value={newQ.cat} onChange={e=>setNewQ({...newQ,cat:e.target.value})} style={{...Sel,flex:1,marginBottom:0}}>{categories.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}</select>
-                  <select value={newQ.difficulty} onChange={e=>setNewQ({...newQ,difficulty:e.target.value})} style={{...Sel,flex:1,marginBottom:0}}><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
+
                 </div>
                 {addQStatus&&<div style={{color:addQStatus.includes("✅")?"#10b981":"#ef4444",fontSize:13,marginBottom:8}}>{addQStatus}</div>}
                 <button onClick={addDirectQ} style={{...Btn("linear-gradient(135deg,#6366f1,#8b5cf6)"),width:"100%"}}>➕ Add to Firebase</button>
@@ -1061,6 +1114,91 @@ export default function App() {
             {adminTab==="members"&&isSuperAdmin&&(
               <MembersPanel db={db} activeMembers={activeMembers}/>
             )}
+          </div>
+        )}
+
+        {/* ── FORUM ── */}
+        {screen==="forum"&&(
+          <div className="pop" style={{paddingTop:16}}>
+            <h2 style={{fontSize:19,fontWeight:900,background:"linear-gradient(135deg,#a5b4fc,#e879f9)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:4}}>💬 Discussion Forum</h2>
+            <p style={{color:"#475569",fontSize:12,marginBottom:14}}>PSC students community • Share knowledge, ask doubts!</p>
+
+            {/* Category Filter */}
+            <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:14}}>
+              {[{id:"all",label:"All",icon:"🌐",color:"#6366f1"},...FORUM_CATS].map(cat=>(
+                <button key={cat.id} onClick={()=>setForumCategory(cat.id)} style={{flexShrink:0,padding:"6px 12px",background:forumCategory===cat.id?`${cat.color}30`:"rgba(255,255,255,0.05)",border:`1px solid ${forumCategory===cat.id?cat.color:"rgba(255,255,255,0.1)"}`,borderRadius:20,color:forumCategory===cat.id?cat.color:"#64748b",cursor:"pointer",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}}>
+                  {cat.icon} {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* New Post Box */}
+            <div style={{...glass(),padding:14,marginBottom:14}}>
+              <div style={{display:"flex",gap:8,marginBottom:10}}>
+                <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:15,flexShrink:0}}>
+                  {(user?.displayName||user?.email||"U")[0].toUpperCase()}
+                </div>
+                <textarea
+                  value={forumMsg}
+                  onChange={e=>setForumMsg(e.target.value)}
+                  placeholder="Share your thoughts, ask a doubt, post study tips..."
+                  rows={3}
+                  style={{flex:1,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,padding:"10px 12px",color:"#e2e8f0",fontSize:13,fontFamily:"inherit",resize:"none",outline:"none"}}
+                />
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <select value={forumCategory==="all"?"general":forumCategory} onChange={e=>setForumCategory(e.target.value)} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"6px 10px",color:"#94a3b8",fontSize:12,fontFamily:"inherit",outline:"none"}}>
+                  {FORUM_CATS.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
+                </select>
+                <button onClick={sendForumPost} disabled={!forumMsg.trim()} style={{background:forumMsg.trim()?"linear-gradient(135deg,#6366f1,#8b5cf6)":"rgba(255,255,255,0.06)",color:forumMsg.trim()?"#fff":"#475569",border:"none",borderRadius:10,padding:"8px 18px",cursor:forumMsg.trim()?"pointer":"default",fontWeight:700,fontSize:13,fontFamily:"inherit",transition:"all 0.2s"}}>
+                  Post 💬
+                </button>
+              </div>
+            </div>
+
+            {/* Posts */}
+            {!forumLoaded&&<div style={{textAlign:"center",padding:20,color:"#475569"}}>Loading...</div>}
+            {forumLoaded&&forumPosts.length===0&&<div style={{...card(),padding:40,textAlign:"center",color:"#475569"}}><div style={{fontSize:40}}>💬</div><p style={{marginTop:10}}>No posts yet! First post ചെയ്യൂ!</p></div>}
+            {forumPosts
+              .filter(p=>forumCategory==="all"||p.category===forumCategory)
+              .map(post=>{
+                const catInfo = FORUM_CATS.find(c=>c.id===post.category)||{icon:"💬",color:"#6366f1",label:"General"};
+                const isOwn = post.uid === user?.uid;
+                const timeAgo = (ts) => {
+                  const diff = Date.now() - ts;
+                  if (diff < 60000) return "just now";
+                  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+                  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+                  return `${Math.floor(diff/86400000)}d ago`;
+                };
+                return (
+                  <div key={post.id} style={{...card(),padding:14,marginBottom:10,borderLeft:`3px solid ${catInfo.color}`}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
+                      <div style={{width:36,height:36,borderRadius:10,background:`linear-gradient(135deg,${catInfo.color},${catInfo.color}aa)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:15,flexShrink:0}}>
+                        {post.avatar||post.name[0].toUpperCase()}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                          <span style={{fontWeight:700,fontSize:13,color:isOwn?"#a5b4fc":"#e2e8f0"}}>{post.name} {isOwn?"(You)":""}</span>
+                          <span style={{fontSize:10,background:`${catInfo.color}20`,color:catInfo.color,padding:"1px 7px",borderRadius:20,fontWeight:700}}>{catInfo.icon} {catInfo.label}</span>
+                        </div>
+                        <div style={{fontSize:10,color:"#475569"}}>{timeAgo(post.time)}</div>
+                      </div>
+                      {(isOwn||isAdmin)&&(
+                        <button onClick={()=>deleteForumPost(post.id)} style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:8,padding:"4px 8px",color:"#ef4444",cursor:"pointer",fontSize:11}}>🗑️</button>
+                      )}
+                    </div>
+                    <p style={{fontSize:14,color:"#e2e8f0",lineHeight:1.6,marginBottom:10}}>{post.msg}</p>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <button onClick={()=>likePost(post)} style={{display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"4px 12px",color:"#64748b",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>
+                        👍 {post.likes||0}
+                      </button>
+                      <span style={{fontSize:11,color:"#334155"}}>💬 PSC Quiz Kerala</span>
+                    </div>
+                  </div>
+                );
+              })
+            }
           </div>
         )}
 
