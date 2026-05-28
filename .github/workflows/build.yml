@@ -5,7 +5,9 @@ on:
   workflow_dispatch:
 jobs:
   build-apk:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
 
@@ -23,26 +25,26 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install and Build
+        run: |
+          npm install
+          npm run build
 
-      - name: Build React app
-        run: npm run build
-
-      - name: Capacitor setup
+      - name: Capacitor Android
         run: |
           npm install @capacitor/core @capacitor/android @capacitor/cli
           npx cap add android || true
           npx cap sync android
 
-      - name: Build APK
+      - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PSC-Quiz-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
