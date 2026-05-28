@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "firebase/auth";
 import { getDatabase, ref, set, get, onValue, push, serverTimestamp, query, orderByChild, limitToLast, remove, update } from "firebase/database";
 
-const APP_VERSION = "1.0.5"; // നിലവിലെ ആപ്പ് വെർഷൻ
+const APP_VERSION = "1.0.6"; // Updated version
 const firebaseConfig = {
   apiKey: "AIzaSyArFo7B3M7lSfbOzUSycMUsnke8YSck74k",
   authDomain: "psc-quiz-kerala.firebaseapp.com",
@@ -50,6 +50,14 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [timer, setTimer] = useState(30);
   const timerRef = useRef(null);
+
+  // Gemini API states
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [geminiPrompt, setGeminiPrompt] = useState("");
+  const [geminiCategory, setGeminiCategory] = useState("ldc");
+  const [geminiCount, setGeminiCount] = useState(5);
+  const [geminiLoading, setGeminiLoading] = useState(false);
+  const [geminiQuestions, setGeminiQuestions] = useState([]);
 
   const showNotif = (msg, type="success") => { setNotif({msg,type}); setTimeout(()=>setNotif(null),3000); };
   const goTo = (s) => { setScreen(s); setHistory(h=>[...h,s]); };
@@ -131,6 +139,120 @@ export default function App() {
       }
     };
     reader.readAsText(file);
+  };
+
+  // 🤖 GEMINI AI INTEGRATION
+  const generateQuestionsWithGemini = async () => {
+    if (!geminiApiKey.trim()) {
+      showNotif("ദയവായി Gemini API കീ നൽകുക", "error");
+      return;
+    }
+    if (!geminiPrompt.trim()) {
+      showNotif("ദയവായി ഒരു prompt നൽകുക", "error");
+      return;
+    }
+
+    setGeminiLoading(true);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `Generate ${geminiCount} multiple choice quiz questions in JSON format based on this topic: "${geminiPrompt}". 
+              Category: ${geminiCategory}
+              
+              Return ONLY a valid JSON array (no markdown, no code blocks, no additional text) where each object has these exact properties:
+              - q: string (the question text)
+              - options: array of 4 strings (answer choices)
+              - answer: number (index 0-3 of correct option)
+              - cat: string (category like "${geminiCategory}")
+              - qm: string (brief explanation or interesting fact, can be empty string)
+              
+              Example format:
+              [{"q":"What is the capital of Kerala?","options":["Kochi","Thiruvananthapuram","Kozhikode","Kannur"],"answer":1,"cat":"ldc","qm":"Thiruvananthapuram is also known as Trivandrum"}]
+              
+              Make questions educational and suitable for PSC exam preparation in Kerala.`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2000,
+          }
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message || "API Error");
+      }
+
+      const generatedText = data.candidates[0].content.parts[0].text;
+      
+      // Clean the response to get valid JSON
+      let cleanJson = generatedText
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+      
+      // Try to find JSON array in the response
+      const jsonMatch = cleanJson.match(/\[.*\]/s);
+      if (jsonMatch) {
+        cleanJson = jsonMatch[0];
+      }
+
+      const parsedQuestions = JSON.parse(cleanJson);
+      
+      // Validate each question has required fields
+      const validQuestions = parsedQuestions.filter(q => 
+        q.q && 
+        Array.isArray(q.options) && 
+        q.options.length === 4 && 
+        typeof q.answer === 'number' && 
+        q.answer >= 0 && 
+        q.answer <= 3
+      );
+
+      if (validQuestions.length === 0) {
+        throw new Error("No valid questions generated");
+      }
+
+      setGeminiQuestions(validQuestions);
+      showNotif(`${validQuestions.length} ചോദ്യങ്ങൾ ജനറേറ്റ് ചെയ്തു!`, "success");
+    } catch (error) {
+      console.error("Gemini API Error:", error);
+      showNotif(`പിശക്: ${error.message}`, "error");
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
+
+  const saveGeminiQuestions = async () => {
+    if (geminiQuestions.length === 0) {
+      showNotif("സേവ് ചെയ്യാൻ ചോദ്യങ്ങളില്ല", "error");
+      return;
+    }
+
+    try {
+      let count = 0;
+      for (const question of geminiQuestions) {
+        await push(ref(db, "questions"), {
+          ...question,
+          addedBy: user.email,
+          addedAt: serverTimestamp(),
+          source: "gemini-ai"
+        });
+        count++;
+      }
+      showNotif(`${count} ചോദ്യങ്ങൾ സേവ് ചെയ്തു!`, "success");
+      setGeminiQuestions([]);
+    } catch (error) {
+      showNotif("സേവ് ചെയ്യുന്നതിൽ പിശക്!", "error");
+    }
   };
 
   const loginGoogle = async () => { try { await signInWithPopup(auth, gProvider); } catch { showNotif("Login Failed", "error"); } };
@@ -218,10 +340,131 @@ export default function App() {
           <div>
             <button onClick={() => setScreen("home")} style={{color:"#94a3b8", background:"none", border:"none", marginBottom:"15px", cursor:"pointer"}}>← Back</button>
             <h2>Admin Panel</h2>
-            <div style={{display:"flex", gap:"10px", margin:"20px 0"}}>
-              <button onClick={() => setAdminTab("pending")} style={{flex:1, padding:"10px", background: adminTab==="pending"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px"}}>Pending ({pendingQ.length})</button>
-              <button onClick={() => setAdminTab("upload")} style={{flex:1, padding:"10px", background: adminTab==="upload"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px"}}>Upload JSON</button>
+            <div style={{display:"flex", gap:"10px", margin:"20px 0", flexWrap:"wrap"}}>
+              <button onClick={() => setAdminTab("pending")} style={{flex:1, padding:"10px", background: adminTab==="pending"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px", minWidth:"120px"}}>Pending ({pendingQ.length})</button>
+              <button onClick={() => setAdminTab("upload")} style={{flex:1, padding:"10px", background: adminTab==="upload"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px", minWidth:"120px"}}>Upload JSON</button>
+              <button onClick={() => setAdminTab("gemini")} style={{flex:1, padding:"10px", background: adminTab==="gemini"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px", minWidth:"120px"}}>🤖 Gemini AI</button>
             </div>
+
+            {/* GEMINI AI TAB */}
+            {adminTab === "gemini" && (
+              <div style={{background:"#111122", padding:"20px", borderRadius:"10px"}}>
+                <h3 style={{marginBottom:"20px", color:"#a5b4fc"}}>🤖 Google Gemini AI - Auto Generate Questions</h3>
+                
+                <div style={{marginBottom:"15px"}}>
+                  <label style={{display:"block", marginBottom:"5px", color:"#94a3b8"}}>Gemini API Key</label>
+                  <input 
+                    type="password" 
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="Enter your Gemini API key"
+                    style={{width:"100%", padding:"10px", background:"#0a0a1a", border:"1px solid #312e81", borderRadius:"5px", color:"#fff"}}
+                  />
+                  <p style={{fontSize:"11px", color:"#475569", marginTop:"5px"}}>Get your key from: <a href="https://makersuite.google.com/app/apikey" target="_blank" style={{color:"#6366f1"}}>Google AI Studio</a></p>
+                </div>
+
+                <div style={{marginBottom:"15px"}}>
+                  <label style={{display:"block", marginBottom:"5px", color:"#94a3b8"}}>Topic / Prompt</label>
+                  <input 
+                    type="text" 
+                    value={geminiPrompt}
+                    onChange={(e) => setGeminiPrompt(e.target.value)}
+                    placeholder="e.g., Kerala History, Indian Constitution, General Science..."
+                    style={{width:"100%", padding:"10px", background:"#0a0a1a", border:"1px solid #312e81", borderRadius:"5px", color:"#fff"}}
+                  />
+                </div>
+
+                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"15px"}}>
+                  <div>
+                    <label style={{display:"block", marginBottom:"5px", color:"#94a3b8"}}>Category</label>
+                    <select 
+                      value={geminiCategory}
+                      onChange={(e) => setGeminiCategory(e.target.value)}
+                      style={{width:"100%", padding:"10px", background:"#0a0a1a", border:"1px solid #312e81", borderRadius:"5px", color:"#fff"}}
+                    >
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display:"block", marginBottom:"5px", color:"#94a3b8"}}>Number of Questions</label>
+                    <select 
+                      value={geminiCount}
+                      onChange={(e) => setGeminiCount(parseInt(e.target.value))}
+                      style={{width:"100%", padding:"10px", background:"#0a0a1a", border:"1px solid #312e81", borderRadius:"5px", color:"#fff"}}
+                    >
+                      {[1,2,3,5,10,15,20].map(n => (
+                        <option key={n} value={n}>{n} Questions</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={generateQuestionsWithGemini}
+                  disabled={geminiLoading}
+                  style={{
+                    width:"100%", 
+                    padding:"15px", 
+                    background: geminiLoading ? "#4b5563" : "linear-gradient(135deg, #4285f4, #34a853)", 
+                    border:"none", 
+                    borderRadius:"10px", 
+                    color:"#fff", 
+                    fontWeight:"bold",
+                    cursor: geminiLoading ? "not-allowed" : "pointer",
+                    marginBottom:"20px"
+                  }}
+                >
+                  {geminiLoading ? "⏳ Generating..." : "🚀 Generate Questions"}
+                </button>
+
+                {/* Display generated questions */}
+                {geminiQuestions.length > 0 && (
+                  <div>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"15px"}}>
+                      <h4 style={{color:"#10b981"}}>✅ Generated {geminiQuestions.length} Questions</h4>
+                      <button 
+                        onClick={saveGeminiQuestions}
+                        style={{
+                          padding:"10px 20px", 
+                          background:"#10b981", 
+                          border:"none", 
+                          borderRadius:"5px", 
+                          color:"#fff", 
+                          fontWeight:"bold",
+                          cursor:"pointer"
+                        }}
+                      >
+                        💾 Save All to Database
+                      </button>
+                    </div>
+                    
+                    <div style={{maxHeight:"400px", overflowY:"auto"}}>
+                      {geminiQuestions.map((q, idx) => (
+                        <div key={idx} style={{background:"#0a0a1a", padding:"15px", borderRadius:"10px", marginBottom:"10px", border:"1px solid #1e1b4b"}}>
+                          <p style={{fontWeight:"bold", marginBottom:"10px"}}>{idx + 1}. {q.q}</p>
+                          <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"5px", marginBottom:"10px"}}>
+                            {q.options.map((opt, i) => (
+                              <div key={i} style={{
+                                padding:"8px", 
+                                borderRadius:"5px", 
+                                background: i === q.answer ? "#065f46" : "#1e1b4b",
+                                color: i === q.answer ? "#10b981" : "#94a3b8",
+                                fontSize:"14px"
+                              }}>
+                                {i === q.answer ? "✓ " : ""}{opt}
+                              </div>
+                            ))}
+                          </div>
+                          {q.qm && <p style={{fontSize:"12px", color:"#64748b"}}>💡 {q.qm}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {adminTab === "upload" && (
               <div style={{background:"#111122", padding:"20px", borderRadius:"10px", textAlign:"center"}}>
