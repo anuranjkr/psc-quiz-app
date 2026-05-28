@@ -339,11 +339,60 @@ export default function App() {
         {screen === "admin" && isAdmin && (
           <div>
             <button onClick={() => setScreen("home")} style={{color:"#94a3b8", background:"none", border:"none", marginBottom:"15px", cursor:"pointer"}}>← Back</button>
-            <h2>Admin Panel</h2>
+            <h2 style={{marginBottom:"20px", color:"#a5b4fc"}}>Admin Panel</h2>
+            
+            {/* Admin Tabs */}
             <div style={{display:"flex", gap:"10px", margin:"20px 0", flexWrap:"wrap"}}>
-              <button onClick={() => setAdminTab("pending")} style={{flex:1, padding:"10px", background: adminTab==="pending"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px", minWidth:"120px"}}>Pending ({pendingQ.length})</button>
-              <button onClick={() => setAdminTab("upload")} style={{flex:1, padding:"10px", background: adminTab==="upload"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px", minWidth:"120px"}}>Upload JSON</button>
-              <button onClick={() => setAdminTab("gemini")} style={{flex:1, padding:"10px", background: adminTab==="gemini"?"#6366f1":"#111122", border:"none", color:"#fff", borderRadius:"5px", minWidth:"120px"}}>🤖 Gemini AI</button>
+              <button 
+                onClick={() => setAdminTab("pending")} 
+                style={{
+                  flex:1, 
+                  padding:"10px", 
+                  background: adminTab==="pending"?"#6366f1":"#111122", 
+                  border:"none", 
+                  color:"#fff", 
+                  borderRadius:"5px", 
+                  minWidth:"100px",
+                  cursor:"pointer",
+                  fontWeight:"bold"
+                }}
+              >
+                Pending ({pendingQ.length})
+              </button>
+              
+              <button 
+                onClick={() => setAdminTab("upload")} 
+                style={{
+                  flex:1, 
+                  padding:"10px", 
+                  background: adminTab==="upload"?"#6366f1":"#111122", 
+                  border:"none", 
+                  color:"#fff", 
+                  borderRadius:"5px", 
+                  minWidth:"100px",
+                  cursor:"pointer",
+                  fontWeight:"bold"
+                }}
+              >
+                Upload JSON
+              </button>
+              
+              <button 
+                onClick={() => setAdminTab("gemini")} 
+                style={{
+                  flex:1, 
+                  padding:"10px", 
+                  background: adminTab==="gemini"?"#6366f1":"#111122", 
+                  border:"none", 
+                  color:"#fff", 
+                  borderRadius:"5px", 
+                  minWidth:"100px",
+                  cursor:"pointer",
+                  fontWeight:"bold"
+                }}
+              >
+                🤖 Gemini AI
+              </button>
             </div>
 
             {/* GEMINI AI TAB */}
@@ -360,7 +409,7 @@ export default function App() {
                     placeholder="Enter your Gemini API key"
                     style={{width:"100%", padding:"10px", background:"#0a0a1a", border:"1px solid #312e81", borderRadius:"5px", color:"#fff"}}
                   />
-                  <p style={{fontSize:"11px", color:"#475569", marginTop:"5px"}}>Get your key from: <a href="https://makersuite.google.com/app/apikey" target="_blank" style={{color:"#6366f1"}}>Google AI Studio</a></p>
+                  <p style={{fontSize:"11px", color:"#475569", marginTop:"5px"}}>Get your key from: <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{color:"#6366f1"}}>Google AI Studio</a></p>
                 </div>
 
                 <div style={{marginBottom:"15px"}}>
@@ -413,7 +462,8 @@ export default function App() {
                     color:"#fff", 
                     fontWeight:"bold",
                     cursor: geminiLoading ? "not-allowed" : "pointer",
-                    marginBottom:"20px"
+                    marginBottom:"20px",
+                    fontSize:"16px"
                   }}
                 >
                   {geminiLoading ? "⏳ Generating..." : "🚀 Generate Questions"}
@@ -422,7 +472,7 @@ export default function App() {
                 {/* Display generated questions */}
                 {geminiQuestions.length > 0 && (
                   <div>
-                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"15px"}}>
+                    <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"15px", flexWrap:"wrap", gap:"10px"}}>
                       <h4 style={{color:"#10b981"}}>✅ Generated {geminiQuestions.length} Questions</h4>
                       <button 
                         onClick={saveGeminiQuestions}
@@ -466,6 +516,7 @@ export default function App() {
               </div>
             )}
 
+            {/* UPLOAD JSON TAB */}
             {adminTab === "upload" && (
               <div style={{background:"#111122", padding:"20px", borderRadius:"10px", textAlign:"center"}}>
                 <h4 style={{marginBottom:"15px"}}>JSON ഫയൽ തിരഞ്ഞെടുക്കുക</h4>
@@ -474,16 +525,60 @@ export default function App() {
               </div>
             )}
 
+            {/* PENDING TAB */}
             {adminTab === "pending" && (
-              pendingQ.map(pq => (
-                <div key={pq.id} style={{background:"#111122", padding:"15px", borderRadius:"10px", marginBottom:"10px"}}>
-                  <p>{pq.q}</p>
-                  <div style={{display:"flex", gap:"10px", marginTop:"10px"}}>
-                    <button onClick={async () => { await push(ref(db, "questions"), { ...pq, status: "approved" }); await remove(ref(db, `pending_questions/${pq.id}`)); showNotif("അംഗീകരിച്ചു!"); }} style={{background:"#10b981", border:"none", padding:"5px 10px", borderRadius:"5px", flex:1}}>Approve</button>
-                    <button onClick={async () => { await remove(ref(db, `pending_questions/${pq.id}`)); showNotif("നീക്കം ചെയ്തു!"); }} style={{background:"#ef4444", border:"none", padding:"5px 10px", borderRadius:"5px", flex:1}}>Reject</button>
+              <div>
+                {pendingQ.length === 0 ? (
+                  <div style={{textAlign:"center", padding:"40px", color:"#64748b"}}>
+                    <p>No pending questions</p>
                   </div>
-                </div>
-              ))
+                ) : (
+                  pendingQ.map(pq => (
+                    <div key={pq.id} style={{background:"#111122", padding:"15px", borderRadius:"10px", marginBottom:"10px"}}>
+                      <p style={{marginBottom:"10px"}}>{pq.q}</p>
+                      <div style={{display:"flex", gap:"10px", marginTop:"10px"}}>
+                        <button 
+                          onClick={async () => { 
+                            await push(ref(db, "questions"), { ...pq, status: "approved" }); 
+                            await remove(ref(db, `pending_questions/${pq.id}`)); 
+                            showNotif("അംഗീകരിച്ചു!"); 
+                          }} 
+                          style={{
+                            background:"#10b981", 
+                            border:"none", 
+                            padding:"8px 15px", 
+                            borderRadius:"5px", 
+                            color:"#fff",
+                            flex:1,
+                            cursor:"pointer",
+                            fontWeight:"bold"
+                          }}
+                        >
+                          Approve
+                        </button>
+                        <button 
+                          onClick={async () => { 
+                            await remove(ref(db, `pending_questions/${pq.id}`)); 
+                            showNotif("നീക്കം ചെയ്തു!"); 
+                          }} 
+                          style={{
+                            background:"#ef4444", 
+                            border:"none", 
+                            padding:"8px 15px", 
+                            borderRadius:"5px", 
+                            color:"#fff",
+                            flex:1,
+                            cursor:"pointer",
+                            fontWeight:"bold"
+                          }}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             )}
           </div>
         )}
