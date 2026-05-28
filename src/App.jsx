@@ -179,15 +179,7 @@ export default function App() {
 
   const logout = async () => { if(user) await remove(ref(db,`online/${user.uid}`)); await signOut(auth); };
 
-  const forgotPassword = async () => {
-    if (!em.trim()) { setAuthErr("❌ Email ആദ്യം ഇടൂ!"); return; }
-    try {
-      await sendPasswordResetEmail(auth, em.trim());
-      setAuthErr("✅ Password reset email അയച്ചു! Inbox check ചെയ്യൂ.");
-    } catch(e) {
-      setAuthErr("❌ Email കണ്ടില്ല! ശരിയായ email ഇടൂ.");
-    }
-  };
+
 
   // Quiz Timer
   useEffect(() => {
