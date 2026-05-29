@@ -90,24 +90,38 @@ function PuterQuizGenerator({ db, categories, user, showNotif }) {
   const [uploadStatus, setUploadStatus] = useState("");
   const [editingIdx, setEditingIdx] = useState(null);
   const [editQ, setEditQ] = useState(null);
+  const [isPuterSignedIn, setIsPuterSignedIn] = useState(false);
+
+  useEffect(() => {
+    if (window.puter && window.puter.auth.isSignedIn()) {
+      setIsPuterSignedIn(true);
+    }
+  }, []);
+
+  const handlePuterLogin = async () => {
+    try {
+      if (!window.puter) {
+        setGenMsg("❌ Puter.js load ആയിട്ടില്ല!");
+        return;
+      }
+      setGenMsg("⏳ ലോഗിൻ വിൻഡോ തുറക്കുന്നു...");
+      await window.puter.auth.signIn();
+      setIsPuterSignedIn(true);
+      setGenMsg("✅ ലോഗിൻ വിജയകരം! ഇനി Generate ചെയ്യാം.");
+      showNotif("Puter Login Success!");
+    } catch (error) {
+      setGenMsg("❌ ലോഗിൻ പരാജയപ്പെട്ടു അല്ലെങ്കിൽ നിങ്ങൾ ക്യാൻസൽ ചെയ്തു.");
+    }
+  };
 
   const generateQuiz = async () => {
     if (!topic.trim()) { setGenMsg("❌ Topic ഇടൂ!"); return; }
-    if (!window.puter) { setGenMsg("❌ Puter.js load ആയിട്ടില്ല! index.html-ൽ script ചേർക്കുക."); return; }
-
+    
     setGenStatus("loading");
-    setGenMsg("🤖 Puter AI-യുമായി ബന്ധിപ്പിക്കുന്നു...");
+    setGenMsg("🤖 Puter AI (Claude) generating questions...");
     setGeneratedQs([]);
 
     try {
-      // 1. Puter Login (Auth fix applied)
-      if (!window.puter.auth.isSignedIn()) {
-         setGenMsg("🔐 Puter അക്കൗണ്ടിലേക്ക് ലോഗിൻ ചെയ്യുന്നു... (Pop-up allow ചെയ്യുക)");
-         await window.puter.auth.signIn();
-      }
-
-      setGenMsg("🤖 Puter AI (Claude) generating questions...");
-
       const malayalamInstruction = includeMalayalam
         ? `Also provide a Malayalam translation of the question in the "qm" field.`
         : `Leave "qm" as empty string "".`;
@@ -141,16 +155,29 @@ Respond with ONLY a valid JSON array. No markdown, no preamble. Example format:
 The "answer" field must be 0, 1, 2, or 3 (index of correct option in options array).
 Generate ${qCount} questions now:`;
 
-      // 2. Timeout ചേർക്കുന്നു 
       const puterPromise = window.puter.ai.chat(prompt);
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("Puter AI പ്രതികരിക്കുന്നില്ല (Timeout). വീണ്ടും ശ്രമിക്കുക.")), 30000)
       );
 
       const response = await Promise.race([puterPromise, timeoutPromise]);
-      let rawText = typeof response === 'string' ? response : (response?.text || response?.message?.content || String(response));
+      
+      let rawText = "";
+      if (typeof response === 'string') {
+        rawText = response;
+      } else if (response && typeof response.text === 'string') {
+        rawText = response.text;
+      } else if (response && response.message && typeof response.message.content === 'string') {
+        rawText = response.message.content;
+      } else {
+        rawText = JSON.stringify(response);
+      }
 
-      let cleaned = rawText.trim();
+      if (!rawText) {
+         throw new Error("AI തന്ന മറുപടി വായിക്കാൻ കഴിഞ്ഞില്ല.");
+      }
+
+      let cleaned = String(rawText).trim();
       cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
       
       const arrMatch = cleaned.match(/\[[\s\S]*\]/);
@@ -233,6 +260,7 @@ Generate ${qCount} questions now:`;
         <div style={{ fontWeight:700, color:"#10b981", marginBottom:12, fontSize:13 }}>⚙️ Generator Settings</div>
         <label style={{ fontSize:11, color:"#64748b", fontWeight:600, display:"block", marginBottom:5 }}>Topic / Subject *</label>
         <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g. Kerala History, Indian Constitution, General Science..." style={Inp} />
+        
         <div style={{ display:"flex", gap:8, marginBottom:10 }}>
           <div style={{ flex:1 }}>
             <label style={{ fontSize:11, color:"#64748b", fontWeight:600, display:"block", marginBottom:5 }}>Category</label>
@@ -269,9 +297,16 @@ Generate ${qCount} questions now:`;
           <div style={{ fontSize:13, marginBottom:10, padding:"10px 12px", borderRadius:10, background:genStatus==="done"?"rgba(16,185,129,0.1)":genStatus==="error"?"rgba(239,68,68,0.1)":"rgba(99,102,241,0.1)", color:genStatus==="done"?"#10b981":genStatus==="error"?"#ef4444":"#a5b4fc", border:`1px solid ${genStatus==="done"?"rgba(16,185,129,0.2)":genStatus==="error"?"rgba(239,68,68,0.2)":"rgba(99,102,241,0.2)"}` }}>{genMsg}</div>
         )}
 
-        <button onClick={generateQuiz} disabled={genStatus === "loading"} style={{ ...Btn("linear-gradient(135deg,#10b981,#06b6d4)"), width:"100%", padding:14, fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8, opacity:genStatus==="loading"?0.7:1 }}>
-          {genStatus === "loading" ? <><span style={{ display:"inline-block", animation:"spin 1s linear infinite" }}>⚙️</span><span>Generating...</span></> : <>🤖 Generate {qCount} Questions with AI</>}
-        </button>
+        {!isPuterSignedIn ? (
+          <button onClick={handlePuterLogin} style={{ ...Btn("linear-gradient(135deg,#f59e0b,#d97706)"), width:"100%", padding:14, fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+            🔐 ലോഗിൻ ചെയ്ത ശേഷം Generate ചെയ്യുക
+          </button>
+        ) : (
+          <button onClick={generateQuiz} disabled={genStatus === "loading"} style={{ ...Btn("linear-gradient(135deg,#10b981,#06b6d4)"), width:"100%", padding:14, fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8, opacity:genStatus==="loading"?0.7:1 }}>
+            {genStatus === "loading" ? <><span style={{ display:"inline-block", animation:"spin 1s linear infinite" }}>⚙️</span><span>Generating...</span></> : <>🤖 Generate {qCount} Questions with AI</>}
+          </button>
+        )}
+        
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       </div>
 
