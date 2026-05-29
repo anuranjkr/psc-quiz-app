@@ -442,17 +442,23 @@ export default function App() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [chatMsgs]);
 
   const loadData = (uid, admin) => {
+    // 🔴 100% കൃത്യമായി ഡാറ്റ ഫെച്ച് ചെയ്യുന്ന ഭാഗം 🔴
     onValue(ref(db,"questions"), snap => {
       const qs = []; 
       if(snap.exists()) {
         snap.forEach(c => qs.push({id:c.key,...c.val()}));
       }
-      setFbQ(qs);
+      setFbQ([...qs]); // Force React State Update
     });
 
     onValue(ref(db,"categories"), snap => {
-      if(snap.exists()) { const cs=[]; snap.forEach(c=>cs.push({id:c.key,...c.val()})); setCategories([...DEFAULT_CATS,...cs]); }
-      else setCategories(DEFAULT_CATS);
+      if(snap.exists()) { 
+        const cs=[]; 
+        snap.forEach(c=>cs.push({id:c.key,...c.val()})); 
+        setCategories([...DEFAULT_CATS,...cs]); 
+      } else {
+        setCategories(DEFAULT_CATS);
+      }
     });
 
     const lbQ = query(ref(db,"leaderboard"), orderByChild("score"), limitToLast(20));
@@ -498,7 +504,7 @@ export default function App() {
   }, [curr, screen]);
 
   const startQuiz = (cat) => {
-    const pool = cat === "mock" ? [...allQ] : allQ.filter(q => q.cat === cat);
+    const pool = cat === "mock" ? [...allQ] : allQ.filter(q => String(q.cat).toLowerCase() === String(cat).toLowerCase());
     const qs = pool.sort(() => Math.random()-0.5).slice(0, quizCount);
     if(!qs.length) { showNotif("Questions ഇല്ല! Admin-ൽ add ചെയ്യൂ.", "error"); return; }
     setSelCat(cat); setQuestions(qs); setCurr(0); setPicked(null); setScore(0); setAnswers([]); setScreen("quiz");
@@ -625,7 +631,9 @@ export default function App() {
             <div style={{fontSize:12,color:"#475569",marginBottom:10,fontWeight:700}}>📚 CATEGORIES</div>
             <div style={{display:"flex",flexDirection:"column",gap:7}}>
               {categories.map(cat=>{
-                const qCount=allQ.filter(q=>q.cat===cat.id).length;
+                // 🔴 കൃത്യമായി കാറ്റഗറികൾ വേർതിരിക്കുന്ന പുതിയ ലോജിക് 🔴
+                const qCount = allQ.filter(q => String(q.cat).toLowerCase() === String(cat.id).toLowerCase()).length;
+                
                 return (
                   <button key={cat.id} onClick={()=>startQuiz(cat.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 15px",background:"rgba(255,255,255,0.03)",border:`1px solid rgba(255,255,255,0.07)`,borderLeft:`3px solid ${cat.color}`,borderRadius:13,textAlign:"left",width:"100%"}}>
                     <span style={{fontSize:22}}>{cat.icon}</span>
@@ -680,43 +688,53 @@ export default function App() {
               ))}
             </div>
 
-            {/* 🔴 UPDATED DIAGNOSTICS TOOL 🔴 */}
             {adminTab==="fix"&&(
               <div style={{...card(),padding:16,borderLeft:"4px solid #ef4444", background:"rgba(239,68,68,0.05)"}}>
                 <h3 style={{color:"#fca5a5",marginBottom:10}}>🛠️ Database Diagnostics</h3>
-                <p style={{fontSize:12,color:"#cbd5e1",marginBottom:10}}>നിങ്ങളുടെ ആപ്പ് കണക്ട് ആയിരിക്കുന്ന ഡാറ്റാബേസിന്റെ വിവരങ്ങൾ.</p>
                 
                 <div style={{background:"rgba(0,0,0,0.3)", padding:12, borderRadius:8, marginBottom:14}}>
                   <div style={{color:"#10b981", fontWeight:"bold", marginBottom:6}}>✓ Total DB Questions: {fbQ.length}</div>
-                  <div style={{fontSize:10, color:"#94a3b8", wordBreak:"break-all", marginBottom:6}}>
-                    <strong>Connected DB URL:</strong><br/>
-                    {db?.app?.options?.databaseURL}
-                  </div>
-                  {fbQ.length > 0 && (
-                    <div style={{fontSize:11, color:"#fbbf24", background:"rgba(255,255,255,0.05)", padding:6, borderRadius:6}}>
-                      <strong>Sample DB Q:</strong> {fbQ[fbQ.length-1].q?.substring(0,60)}...
+                </div>
+                
+                {/* 🔴 ഡിലീറ്റ് ആയിപ്പോയ കാറ്റഗറികൾ കണ്ടെത്താനും പരിഹരിക്കാനുമുള്ള ടൂൾ 🔴 */}
+                <div style={{background:"rgba(0,0,0,0.3)", padding:12, borderRadius:8, marginBottom:14}}>
+                  <div style={{color:"#f59e0b", fontWeight:"bold", marginBottom:6}}>⚠ Orphaned Questions</div>
+                  <p style={{fontSize:11, color:"#94a3b8", marginBottom:10}}>നിങ്ങൾ പഴയ കാറ്റഗറി ഡിലീറ്റ് ചെയ്തപ്പോൾ വഴിതെറ്റിയ ചോദ്യങ്ങൾ.</p>
+                  
+                  {Object.entries(fbQ.reduce((acc, q) => { 
+                    if(!categories.find(c=>String(c.id).toLowerCase() === String(q.cat).toLowerCase())){ 
+                      acc[q.cat]=(acc[q.cat]||0)+1;
+                    } 
+                    return acc; 
+                  }, {})).map(([catId, count]) => (
+                    <div key={catId} style={{background:"rgba(255,255,255,0.05)", padding:8, borderRadius:6, marginBottom:6}}>
+                      <div style={{fontSize:12, color:"#e2e8f0"}}>ID: <strong>{catId}</strong> ({count} Qs)</div>
+                      
+                      {/* ഇവയെ എളുപ്പത്തിൽ 'LDC / LGS' കാറ്റഗറിയിലേക്ക് മാറ്റാനുള്ള ബട്ടൺ */}
+                      <button onClick={async () => {
+                        if(window.confirm("ഈ ചോദ്യങ്ങളെല്ലാം LDC കാറ്റഗറിയിലേക്ക് മാറ്റട്ടേ?")) {
+                          showNotif("⏳ Fixing questions...");
+                          const orphanedQs = fbQ.filter(q => String(q.cat).toLowerCase() === String(catId).toLowerCase());
+                          for(let q of orphanedQs) {
+                            await update(ref(db, `questions/${q.id}`), { cat: "ldc" });
+                          }
+                          showNotif("✅ Fixed successfully!");
+                        }
+                      }} style={{...Btn("rgba(99,102,241,0.2)", "#a5b4fc"), padding:"4px 8px", fontSize:10, marginTop:6}}>
+                        Move to LDC Category
+                      </button>
                     </div>
+                  ))}
+                  {Object.keys(fbQ.reduce((acc, q) => { if(!categories.find(c=>String(c.id).toLowerCase() === String(q.cat).toLowerCase())) acc[q.cat]=1; return acc; }, {})).length === 0 && (
+                    <div style={{fontSize:11, color:"#10b981"}}>എല്ലാ ചോദ്യങ്ങൾക്കും കാറ്റഗറിയുണ്ട്! കുഴപ്പങ്ങളൊന്നുമില്ല.</div>
                   )}
                 </div>
-
-                <button onClick={async () => {
-                  try {
-                    showNotif("⏳ Writing test question...");
-                    const testRef = push(ref(db, "questions"));
-                    await set(testRef, {
-                      q: "System Test Question from Admin Panel", options: ["A","B","C","D"], answer: 0, cat: "ldc", addedBy: "admin_test"
-                    });
-                    showNotif("✅ Test question written successfully!");
-                  } catch(e) {
-                    showNotif("❌ Write failed: " + e.message, "error");
-                  }
-                }} style={{...Btn("rgba(16,185,129,0.2)", "#10b981", {border:"1px solid rgba(16,185,129,0.4)"}), width:"100%", marginBottom:10}}>✍️ Send Test Question to DB</button>
 
                 <button onClick={async () => {
                   showNotif("⏳ Syncing from Firebase...");
                   const snap = await get(ref(db, "questions"));
                   const qs = []; if(snap.exists()) snap.forEach(c => qs.push({id:c.key,...c.val()}));
-                  setFbQ(qs);
+                  setFbQ([...qs]);
                   showNotif(`✅ Force Sync Done! Fetched ${qs.length} questions.`);
                 }} style={{...Btn("#6366f1"), width:"100%"}}>🔄 Force Fetch Database</button>
               </div>
