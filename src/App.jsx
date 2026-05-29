@@ -4,7 +4,7 @@ import { getAnalytics } from "firebase/analytics";
 import {
   getAuth, signInWithPopup, GoogleAuthProvider,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail
+  signOut, onAuthStateChanged, updateProfile
 } from "firebase/auth";
 import {
   getDatabase, ref, set, get, onValue, push,
@@ -27,6 +27,8 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const analytics = getAnalytics(firebaseApp);
 const auth = getAuth(firebaseApp);
+
+// 🔴 ഇതാണ് ഏറ്റവും പ്രധാനപ്പെട്ട വരി: ഏഷ്യൻ ഡാറ്റാബേസ് ലിങ്ക് നേരിട്ട് നൽകിയിരിക്കുന്നു 🔴
 const db = getDatabase(firebaseApp, "https://psc-quiz-kerala-default-rtdb.asia-southeast1.firebasedatabase.app");
 const gProvider = new GoogleAuthProvider();
 
@@ -46,28 +48,6 @@ const DEFAULT_CATS = [
 const BUILTIN_Q = [
   { id:"b1",  q:"Kerala formed on?",                qm:"കേരളം രൂപീകരിച്ചത്?",                options:["Nov 1, 1956","Aug 15, 1947","Jan 26, 1950","Nov 1, 1960"],                   answer:0, cat:"ldc",       explanation:"Kerala was formed on November 1, 1956." },
   { id:"b2",  q:"Longest river in Kerala?",         qm:"കേരളത്തിലെ ഏറ്റവും നീളമേറിയ നദി?",  options:["Periyar","Bharathapuzha","Pamba","Chaliyar"],                                answer:1, cat:"ldc",       explanation:"Bharathapuzha (312 km) is the longest river in Kerala." },
-  { id:"b3",  q:"Capital of Kerala?",               qm:"കേരളത്തിന്റെ തലസ്ഥാനം?",            options:["Kochi","Kozhikode","Thiruvananthapuram","Thrissur"],                          answer:2, cat:"ldc",       explanation:"Thiruvananthapuram is the capital of Kerala." },
-  { id:"b4",  q:"Highest peak in Kerala?",          qm:"കേരളത്തിലെ ഏറ്റവും ഉയർന്ന കൊടുമുടി?", options:["Chembra","Anamudi","Meesapulimala","Agasthyamala"],                      answer:1, cat:"ldc",       explanation:"Anamudi (2695m) is the highest peak." },
-  { id:"b5",  q:"Father of Indian Constitution?",   qm:"ഭരണഘടനയുടെ പിതാവ്?",               options:["Nehru","Sardar Patel","BR Ambedkar","Rajendra Prasad"],                       answer:2, cat:"psc",       explanation:"Dr. BR Ambedkar is the Father of the Indian Constitution." },
-  { id:"b6",  q:"National game of India?",          qm:"ദേശീയ കായിക വിനോദം?",               options:["Cricket","Football","Hockey","Kabaddi"],                                      answer:2, cat:"psc",       explanation:"Hockey is the national game of India." },
-  { id:"b7",  q:"IPC stands for?",                  qm:"IPC-യുടെ പൂർണ്ണ രൂപം?",              options:["Indian Penal Code","Indian Police Code","Indian Penal Court","Indian Public Code"], answer:0, cat:"police", explanation:"IPC - Indian Penal Code, enacted in 1860." },
-  { id:"b8",  q:"Chemical symbol of Gold?",         qm:"സ്വർണ്ണത്തിന്റെ രാസ ചിഹ്നം?",       options:["Go","Gd","Au","Ag"],                                                         answer:2, cat:"science",   explanation:"Au comes from Latin 'Aurum'." },
-  { id:"b9",  q:"Speed of light?",                  qm:"പ്രകാശ വേഗത?",                        options:["3×10⁸ m/s","3×10⁶ m/s","3×10⁵ m/s","3×10⁴ m/s"],                           answer:0, cat:"science",   explanation:"Speed of light = 3×10⁸ m/s." },
-  { id:"b10", q:"Battle of Plassey year?",           qm:"പ്ലാസി യുദ്ധം?",                      options:["1747","1757","1764","1799"],                                                  answer:1, cat:"history",   explanation:"Battle of Plassey was fought in 1757." },
-  { id:"b11", q:"Chandrayaan-3 landed in?",         qm:"ചന്ദ്രയാൻ-3 ഇറങ്ങിയ വർഷം?",         options:["2021","2022","2023","2024"],                                                  answer:2, cat:"current",   explanation:"Chandrayaan-3 landed on Moon on August 23, 2023." },
-  { id:"b12", q:"Largest state in India by area?",  qm:"ഏറ്റവും വലിയ സംസ്ഥാനം?",             options:["MP","Maharashtra","Rajasthan","UP"],                                          answer:2, cat:"geography", explanation:"Rajasthan is the largest state." },
-];
-
-// ─── Q Count Options ────────────────────────────────────────
-const Q_COUNT_OPTIONS = [
-  { value: 1,  label: "1 Question  (Quick Test)" },
-  { value: 2,  label: "2 Questions" },
-  { value: 5,  label: "5 Questions" },
-  { value: 10, label: "10 Questions (Default)" },
-  { value: 15, label: "15 Questions" },
-  { value: 20, label: "20 Questions" },
-  { value: 30, label: "30 Questions" },
-  { value: 50, label: "50 Questions (Full Set)" },
 ];
 
 // ─── Puter.js AI Quiz Generator ──────────────────────────────
@@ -76,224 +56,74 @@ function PuterQuizGenerator({ db, categories, user, showNotif }) {
   const [targetCat, setTargetCat] = useState("ldc");
   const [qCount, setQCount] = useState(10);
   const [difficulty, setDifficulty] = useState("medium");
-  const [includeMalayalam, setIncludeMalayalam] = useState(false);
   const [generatedQs, setGeneratedQs] = useState([]);
   const [genStatus, setGenStatus] = useState("idle");
   const [genMsg, setGenMsg] = useState("");
-  const [uploadStatus, setUploadStatus] = useState("");
-  const [editingIdx, setEditingIdx] = useState(null);
-  const [editQ, setEditQ] = useState(null);
   const [isPuterSignedIn, setIsPuterSignedIn] = useState(false);
 
   useEffect(() => {
-    if (window.puter && window.puter.auth && window.puter.auth.isSignedIn()) {
-      setIsPuterSignedIn(true);
-    }
+    if (window.puter && window.puter.auth && window.puter.auth.isSignedIn()) setIsPuterSignedIn(true);
   }, []);
 
   const handlePuterLogin = async () => {
-    try {
-      await window.puter.auth.signIn();
-      setIsPuterSignedIn(true);
-      showNotif("Puter Login Success!");
-    } catch (error) {
-      setGenMsg("❌ Puter login failed.");
-    }
+    try { await window.puter.auth.signIn(); setIsPuterSignedIn(true); showNotif("Puter Login Success!"); } 
+    catch (e) { setGenMsg("❌ ലോഗിൻ പരാജയപ്പെട്ടു."); }
   };
 
   const generateQuiz = async () => {
     if (!topic.trim()) { setGenMsg("❌ Topic ഇടൂ!"); return; }
-    setGenStatus("loading");
-    setGenMsg(`🤖 Puter AI generating ${qCount} questions...`);
+    setGenStatus("loading"); setGenMsg("🤖 Puter AI generating questions..."); setGeneratedQs([]);
     try {
-      const malayalamInstruction = includeMalayalam
-        ? `Also provide a Malayalam translation in "qm" field.`
-        : `Leave "qm" as "".`;
-      const prompt = `Generate exactly ${qCount} MCQs about "${topic}". Category: ${targetCat}. Difficulty: ${difficulty}. ${malayalamInstruction} Return ONLY a JSON array: [{"q":"?", "qm":"", "options":["","","",""], "answer":0, "explanation":""}]`;
-      const response = await window.puter.ai.chat(prompt);
-      let rawText = typeof response === 'string' ? response : response?.text || JSON.stringify(response);
-      let cleaned = rawText.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+      const prompt = `Create ${qCount} Kerala PSC MCQs about "${topic}". Difficulty: ${difficulty}. Category: ${targetCat}. Return ONLY a JSON array: [{"q":"Eng Q", "qm":"", "options":["A","B","C","D"], "answer":0, "explanation":"Exp"}]`;
+      const response = await Promise.race([
+        window.puter.ai.chat(prompt),
+        new Promise((_, r) => setTimeout(() => r(new Error("Timeout")), 30000))
+      ]);
+      let rawText = typeof response === 'string' ? response : response?.text || (Array.isArray(response?.message?.content) ? response.message.content.map(b=>b.text).join('') : response?.message?.content) || JSON.stringify(response);
+      let cleaned = String(rawText).trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
       const parsed = JSON.parse(cleaned.match(/\[[\s\S]*\]/)[0]);
-
-      const normalized = parsed.map(q => ({
-        q: q.q || q.question || "Untitled Question",
-        qm: q.qm || "",
-        options: q.options || ["A", "B", "C", "D"],
-        answer: typeof q.answer === "number" ? q.answer : 0,
-        explanation: q.explanation || "",
-        cat: targetCat.toLowerCase().trim(),
-        _selected: true
-      }));
-      setGeneratedQs(normalized);
-      setGenStatus("done");
-      setGenMsg(`✅ Generated ${normalized.length} questions!`);
-    } catch (e) {
-      setGenStatus("error");
-      setGenMsg(`❌ Error: ${e.message}`);
-    }
+      
+      const normalized = parsed.map((q, i) => {
+        let ansIdx = typeof q.answer === "number" ? q.answer : 0;
+        return {
+          q: q.q || `Question ${i + 1}`, qm: q.qm || "", options: q.options || ["A", "B", "C", "D"], answer: ansIdx, explanation: q.explanation || "", cat: targetCat.toLowerCase().trim()
+        };
+      });
+      setGeneratedQs(normalized); setGenStatus("done"); setGenMsg(`✅ ${normalized.length} questions generated!`);
+    } catch (e) { setGenStatus("error"); setGenMsg(`❌ Error: ${e.message}`); }
   };
 
   const uploadSelected = async () => {
-    const toUpload = generatedQs.filter(q => q._selected);
-    if (!toUpload.length) return;
-    setUploadStatus("⏳ Uploading...");
+    if (!generatedQs.length) return;
+    setGenMsg("⏳ Uploading...");
     try {
-      for (const q of toUpload) {
-        const { _selected, ...qData } = q;
-        await push(ref(db, "questions"), { ...qData, addedBy: user.email, addedAt: serverTimestamp() });
+      for (const q of generatedQs) {
+        await push(ref(db, "questions"), { ...q, addedBy: user.email, addedAt: serverTimestamp() });
       }
-      showNotif("🚀 Uploaded successfully!");
-      setGeneratedQs([]);
-    } catch (err) {
-      showNotif("Upload failed: " + err.message, "error");
-    } finally { setUploadStatus(""); }
-  };
-
-  const selectStyle = {
-    width: "100%",
-    padding: 10,
-    borderRadius: 8,
-    background: "#111",
-    color: "#fff",
-    border: "1px solid #333",
-    marginBottom: 8,
-    fontSize: 14,
-    cursor: "pointer",
+      showNotif(`🎉 Questions uploaded successfully!`);
+      setGeneratedQs([]); setGenStatus("idle");
+    } catch (err) { setGenMsg("Error: " + err.message); }
   };
 
   return (
-    <div style={{ background: "rgba(255,255,255,0.03)", padding: 12, borderRadius: 12, marginBottom: 15 }}>
+    <div style={{background:"rgba(255,255,255,0.05)", padding:15, borderRadius:12, marginBottom:15}}>
+      <h3 style={{color:"#10b981", marginBottom:10}}>🤖 AI Quiz Generator</h3>
+      <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="Topic (e.g. Kerala History)" style={{width:"100%", padding:10, borderRadius:8, background:"#111", color:"#fff", border:"1px solid #333", marginBottom:8}} />
+      <div style={{display:"flex", gap:8, marginBottom:10}}>
+        <select value={targetCat} onChange={e => setTargetCat(e.target.value)} style={{flex:1, padding:10, borderRadius:8, background:"#111", color:"#fff", border:"1px solid #333"}}>
+          {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+        <select value={qCount} onChange={e => setQCount(Number(e.target.value))} style={{flex:1, padding:10, borderRadius:8, background:"#111", color:"#fff", border:"1px solid #333"}}>
+          {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} Questions</option>)}
+        </select>
+      </div>
+      <p style={{fontSize:12, color:"#aaa"}}>{genMsg}</p>
+      
+      {!isPuterSignedIn ? ( <button onClick={handlePuterLogin} style={{padding:10, background:"#f59e0b", border:"none", borderRadius:8, width:"100%", fontWeight:"bold", cursor:"pointer"}}>Login to Puter AI</button>
+      ) : ( <button onClick={generateQuiz} disabled={genStatus==="loading"} style={{padding:10, background:"#10b981", border:"none", borderRadius:8, width:"100%", fontWeight:"bold", color:"#fff", cursor:"pointer"}}>Generate Questions</button> )}
 
-      {/* Topic Input */}
-      <input
-        value={topic}
-        onChange={e => setTopic(e.target.value)}
-        placeholder="Enter Topic (e.g. India Rivers)"
-        style={{ width: "100%", padding: 10, borderRadius: 8, background: "#111", color: "#fff", border: "1px solid #333", marginBottom: 8 }}
-      />
-
-      {/* Category Select */}
-      <select value={targetCat} onChange={e => setTargetCat(e.target.value)} style={selectStyle}>
-        {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-      </select>
-
-      {/* ✅ Question Count Select — Updated with multiple options */}
-      <label style={{ fontSize: 12, color: "#aaa", marginBottom: 4, display: "block" }}>
-        📊 Number of Questions to Generate:
-      </label>
-      <select
-        value={qCount}
-        onChange={e => setQCount(Number(e.target.value))}
-        style={{ ...selectStyle, borderColor: "#6366f1" }}
-      >
-        {Q_COUNT_OPTIONS.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-
-      {/* Difficulty Select */}
-      <label style={{ fontSize: 12, color: "#aaa", marginBottom: 4, display: "block" }}>
-        🎯 Difficulty Level:
-      </label>
-      <select value={difficulty} onChange={e => setDifficulty(e.target.value)} style={selectStyle}>
-        <option value="easy">Easy</option>
-        <option value="medium">Medium</option>
-        <option value="hard">Hard</option>
-      </select>
-
-      {/* Malayalam Toggle */}
-      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer", fontSize: 13, color: "#ccc" }}>
-        <input
-          type="checkbox"
-          checked={includeMalayalam}
-          onChange={e => setIncludeMalayalam(e.target.checked)}
-          style={{ width: 16, height: 16 }}
-        />
-        Include Malayalam Translation (qm)
-      </label>
-
-      {/* Status Message */}
-      {genMsg && (
-        <p style={{
-          fontSize: 12,
-          color: genStatus === "error" ? "#ef4444" : genStatus === "done" ? "#10b981" : "#f59e0b",
-          marginBottom: 8,
-          background: "rgba(0,0,0,0.3)",
-          padding: "6px 10px",
-          borderRadius: 6
-        }}>
-          {genMsg}
-        </p>
-      )}
-
-      {/* Login / Generate Button */}
-      {!isPuterSignedIn ? (
-        <button
-          onClick={handlePuterLogin}
-          style={{ padding: 10, background: "#f59e0b", border: "none", borderRadius: 8, width: "100%", fontWeight: "bold", cursor: "pointer" }}
-        >
-          Login to Puter AI
-        </button>
-      ) : (
-        <button
-          onClick={generateQuiz}
-          disabled={genStatus === "loading"}
-          style={{
-            padding: 10,
-            background: genStatus === "loading" ? "#333" : "#10b981",
-            border: "none",
-            borderRadius: 8,
-            width: "100%",
-            fontWeight: "bold",
-            color: "#fff",
-            cursor: genStatus === "loading" ? "not-allowed" : "pointer",
-            opacity: genStatus === "loading" ? 0.7 : 1
-          }}
-        >
-          {genStatus === "loading" ? `⏳ Generating ${qCount} Questions...` : `🤖 Generate ${qCount} Questions`}
-        </button>
-      )}
-
-      {/* Generated Questions Preview */}
       {generatedQs.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <p style={{ fontSize: 12, color: "#aaa", marginBottom: 6 }}>
-            📋 Preview ({generatedQs.filter(q => q._selected).length} selected):
-          </p>
-          <div style={{ maxHeight: 200, overflowY: "auto", background: "#000", borderRadius: 8, padding: 8 }}>
-            {generatedQs.map((q, i) => (
-              <label key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={q._selected}
-                  onChange={() => {
-                    const updated = [...generatedQs];
-                    updated[i]._selected = !updated[i]._selected;
-                    setGeneratedQs(updated);
-                  }}
-                  style={{ marginTop: 3 }}
-                />
-                <span style={{ fontSize: 11, color: "#ccc" }}>{i + 1}. {q.q}</span>
-              </label>
-            ))}
-          </div>
-          <button
-            onClick={uploadSelected}
-            style={{
-              padding: 10,
-              background: "#6366f1",
-              border: "none",
-              borderRadius: 8,
-              width: "100%",
-              fontWeight: "bold",
-              color: "#fff",
-              marginTop: 8,
-              cursor: "pointer"
-            }}
-          >
-            🚀 Upload {generatedQs.filter(q => q._selected).length} Qs to Firebase
-          </button>
-        </div>
+        <button onClick={uploadSelected} style={{padding:10, background:"#6366f1", border:"none", borderRadius:8, width:"100%", fontWeight:"bold", color:"#fff", marginTop:10, cursor:"pointer"}}>🚀 Upload {generatedQs.length} Qs to Firebase</button>
       )}
     </div>
   );
@@ -305,26 +135,21 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authMode, setAuthMode] = useState("login");
-  const [authLoading, setAuthLoading] = useState(false);
   const [em, setEm] = useState(""); const [pw, setPw] = useState(""); const [dn, setDn] = useState("");
   const [authErr, setAuthErr] = useState("");
 
   const [categories, setCategories] = useState(DEFAULT_CATS);
   const [fbQ, setFbQ] = useState([]);
   const [allQ, setAllQ] = useState(BUILTIN_Q);
-  const [myStats, setMyStats] = useState({});
   const [dbError, setDbError] = useState("");
 
   const [selCat, setSelCat] = useState(null);
   const [questions, setQuestions] = useState([]);
-  const [quizCount, setQuizCount] = useState(10);
   const [curr, setCurr] = useState(0);
   const [picked, setPicked] = useState(null);
   const [score, setScore] = useState(0);
-  const [answers, setAnswers] = useState([]);
   const [adminTab, setAdminTab] = useState("fix");
 
-  const [newQ, setNewQ] = useState({ q:"",qm:"",o1:"",o2:"",o3:"",o4:"",answer:"0",cat:"ldc",explanation:"" });
   const [notif, setNotif] = useState(null);
   const showNotif = (msg, type="success") => { setNotif({msg,type}); setTimeout(()=>setNotif(null),3000); };
 
@@ -342,9 +167,7 @@ export default function App() {
     });
   }, []);
 
-  useEffect(() => {
-    setAllQ([...BUILTIN_Q, ...fbQ]);
-  }, [fbQ]);
+  useEffect(() => { setAllQ([...BUILTIN_Q, ...fbQ]); }, [fbQ]);
 
   const loadData = (uid) => {
     setDbError("");
@@ -353,57 +176,34 @@ export default function App() {
       if (snap.exists()) {
         snap.forEach(c => {
           const val = c.val();
-          if (val) {
-            qs.push({
-              id: c.key,
-              ...val,
-              cat: val.cat ? String(val.cat).toLowerCase().trim() : "ldc"
-            });
-          }
+          if (val) qs.push({ id: c.key, ...val, cat: val.cat ? String(val.cat).toLowerCase().trim() : "ldc" });
         });
       }
       setFbQ(qs);
-    }, err => {
-      setDbError(err.message);
+    }, err => setDbError(err.message));
+
+    onValue(ref(db, "categories"), snap => {
+      if(snap.exists()) { 
+        const cs=[]; snap.forEach(c=>cs.push({id:c.key,...c.val()})); 
+        setCategories([...DEFAULT_CATS,...cs]); 
+      } else setCategories(DEFAULT_CATS);
     });
-
-    onValue(ref(db, `users/${uid}/stats`), snap => { if(snap.exists()) setMyStats(snap.val()); });
   };
 
-  const loginGoogle = async () => {
-    try { await signInWithPopup(auth, gProvider); } catch(e) { setAuthErr("Google login failed."); }
-  };
-
-  const loginEmail = async () => {
-    setAuthLoading(true); setAuthErr("");
-    try {
-      if (authMode === "register") {
-        const cred = await createUserWithEmailAndPassword(auth, em, pw);
-        await updateProfile(cred.user, { displayName: dn });
-      } else {
-        await signInWithEmailAndPassword(auth, em, pw);
-      }
-    } catch(e) { setAuthErr(e.message); }
-    setAuthLoading(false);
-  };
-
+  const loginGoogle = async () => { try { await signInWithPopup(auth, gProvider); } catch(e) { setAuthErr("Google login failed."); } };
   const logout = () => { signOut(auth); setScreen("auth"); };
 
   const startQuiz = (cat) => {
     const pool = cat === "mock" ? [...allQ] : allQ.filter(q => String(q.cat).toLowerCase().trim() === String(cat).toLowerCase().trim());
-    const qs = pool.sort(() => Math.random() - 0.5).slice(0, quizCount);
-    if (!qs.length) {
-      showNotif("ഈ കാറ്റഗറിയിൽ ചോദ്യങ്ങൾ ലഭ്യമല്ല!", "error");
-      return;
-    }
-    setSelCat(cat); setQuestions(qs); setCurr(0); setPicked(null); setScore(0); setAnswers([]); setScreen("quiz");
+    const qs = pool.sort(() => Math.random() - 0.5).slice(0, 10);
+    if (!qs.length) return showNotif("ഈ കാറ്റഗറിയിൽ ചോദ്യങ്ങൾ ലഭ്യമല്ല!", "error");
+    setSelCat(cat); setQuestions(qs); setCurr(0); setPicked(null); setScore(0); setScreen("quiz");
   };
 
   const handleAns = (i) => {
     if (picked !== null) return;
     setPicked(i);
     if (i === questions[curr].answer) setScore(s => s + 1);
-    setAnswers(a => [...a, { q: questions[curr], sel: i, ok: i === questions[curr].answer }]);
   };
 
   const nextQ = () => {
@@ -417,17 +217,8 @@ export default function App() {
   if (screen === "auth") return (
     <div style={{...S, display:"flex", alignItems:"center", justifyContent:"center", padding:20}}>
       <div style={{width:"100%", maxWidth:400, background:"#0f0f25", padding:20, borderRadius:16, border:"1px solid #222"}}>
-        <h2 style={{textAlign:"center", color:"#a5b4fc", marginBottom:20}}>🎓 PSC Quiz Kerala Login</h2>
+        <h2 style={{textAlign:"center", color:"#a5b4fc", marginBottom:20}}>🎓 PSC Quiz Kerala</h2>
         <button onClick={loginGoogle} style={{width:"100%", padding:12, background:"#fff", color:"#000", border:"none", borderRadius:8, fontWeight:"bold", marginBottom:15, cursor:"pointer"}}>Continue with Google</button>
-        <div style={{display:"flex", marginBottom:10, gap:5}}>
-          <button onClick={()=>setAuthMode("login")} style={{flex:1, padding:8, background:authMode==="login"?"#6366f1":"#222", border:"none", borderRadius:6, color:"#fff"}}>Login</button>
-          <button onClick={()=>setAuthMode("register")} style={{flex:1, padding:8, background:authMode==="register"?"#6366f1":"#222", border:"none", borderRadius:6, color:"#fff"}}>Register</button>
-        </div>
-        {authMode==="register" && <input value={dn} onChange={e=>setDn(e.target.value)} placeholder="Full Name" style={Inp} />}
-        <input value={em} onChange={e=>setEm(e.target.value)} placeholder="Email" style={Inp} />
-        <input value={pw} onChange={e=>setPw(e.target.value)} placeholder="Password" type="password" style={Inp} />
-        {authErr && <p style={{color:"#ef4444", fontSize:12}}>{authErr}</p>}
-        <button onClick={loginEmail} style={{width:"100%", padding:12, background:"#6366f1", border:"none", borderRadius:8, color:"#fff", fontWeight:"bold", cursor:"pointer"}}>{authLoading?"Loading...":"Submit"}</button>
       </div>
     </div>
   );
@@ -435,7 +226,7 @@ export default function App() {
   return (
     <div style={S}>
       {notif && <div style={{position:"fixed", top:10, left:"50%", transform:"translateX(-50%)", background:notif.type==="error"?"#ef4444":"#10b981", padding:"10px 20px", borderRadius:20, zIndex:9999}}>{notif.msg}</div>}
-
+      
       <div style={{background:"#0f0f25", padding:15, display:"flex", justifyContent:"space-between", alignItems:"center", borderBottom:"1px solid #222"}}>
         <span onClick={()=>setScreen("home")} style={{fontWeight:"bold", color:"#a5b4fc", cursor:"pointer"}}>🎓 PSC Quiz Kerala</span>
         <div>
@@ -445,11 +236,11 @@ export default function App() {
       </div>
 
       <div style={{maxWidth:500, margin:"0 auto", padding:15}}>
-
+        
         {dbError && (
           <div style={{background:"rgba(239,68,68,0.2)", border:"1px solid #ef4444", padding:12, borderRadius:10, marginBottom:15, color:"#fca5a5"}}>
-            <h4 style={{margin:0}}>⚠ Firebase Error Detected!</h4>
-            <p style={{fontSize:12, margin:"4px 0 0"}}>{dbError}. (Firebase Console → Realtime Database → Rules → read, write: true ആക്കുക)</p>
+            <h4 style={{margin:0}}>⚠ Firebase Error!</h4>
+            <p style={{fontSize:12, margin:"4px 0 0"}}>{dbError}</p>
           </div>
         )}
 
@@ -457,7 +248,7 @@ export default function App() {
           <div>
             <div style={{background:"#0f0f25", padding:15, borderRadius:12, textAlign:"center", marginBottom:15, border:"1px solid #222"}}>
               <h3 style={{margin:0, color:"#e879f9"}}>Welcome to Kerala PSC Prep</h3>
-              <p style={{fontSize:12, color:"#888"}}>Total Questions: {allQ.length} (From DB: {fbQ.length})</p>
+              <p style={{fontSize:12, color:"#10b981", fontWeight:"bold", marginTop:5}}>Total Questions: {allQ.length} (From DB: {fbQ.length})</p>
               <button onClick={()=>startQuiz("mock")} style={{width:"100%", padding:12, background:"#ec7293", border:"none", borderRadius:8, color:"#fff", fontWeight:"bold", marginTop:10, cursor:"pointer"}}>🎯 Start Full Mock Test</button>
             </div>
 
@@ -501,28 +292,14 @@ export default function App() {
           <div style={{textAlign:"center", padding:20}}>
             <h2>🎉 Quiz Completed!</h2>
             <h1 style={{color:"#a855f7"}}>{score}/{questions.length}</h1>
-            <p style={{color:"#aaa"}}>
-              {score === questions.length ? "🏆 Perfect Score!" : score >= questions.length * 0.7 ? "👍 Good Job!" : "📚 Keep Practicing!"}
-            </p>
-            <div style={{background:"#0f0f25", borderRadius:12, padding:15, marginTop:15, textAlign:"left"}}>
-              {answers.map((a, i) => (
-                <div key={i} style={{marginBottom:8, borderBottom:"1px solid #222", paddingBottom:8}}>
-                  <p style={{fontSize:13, margin:0, color:"#ccc"}}>{i+1}. {a.q.q}</p>
-                  <p style={{fontSize:12, margin:"4px 0 0", color: a.ok ? "#10b981" : "#ef4444"}}>
-                    {a.ok ? "✅" : "❌"} Your answer: {a.q.options[a.sel]}
-                    {!a.ok && ` | Correct: ${a.q.options[a.q.answer]}`}
-                  </p>
-                  {a.q.explanation && <p style={{fontSize:11, color:"#888", margin:"2px 0 0"}}>💡 {a.q.explanation}</p>}
-                </div>
-              ))}
-            </div>
-            <button onClick={()=>setScreen("home")} style={{padding:"10px 20px", background:"#6366f1", border:"none", borderRadius:8, color:"#fff", cursor:"pointer", marginTop:15}}>Go Home</button>
+            <button onClick={()=>setScreen("home")} style={{padding:"10px 20px", background:"#6366f1", border:"none", borderRadius:8, color:"#fff", cursor:"pointer"}}>Go Home</button>
           </div>
         )}
 
         {screen === "admin" && isAdmin && (
           <div>
-            <h3 style={{color:"#fbbf24"}}>👑 Super Admin Panel</h3>
+            <button onClick={()=>setScreen("home")} style={{padding:"8px 12px", background:"#222", border:"none", borderRadius:6, color:"#fff", marginBottom:15}}>← Back</button>
+            <h3 style={{color:"#fbbf24"}}>👑 Admin Panel</h3>
             <div style={{display:"flex", gap:5, marginBottom:15}}>
               <button onClick={()=>setAdminTab("fix")} style={{flex:1, padding:8, background:adminTab==="fix"?"#6366f1":"#222", border:"none", borderRadius:6, color:"#fff"}}>Database Fix</button>
               <button onClick={()=>setAdminTab("ai")} style={{flex:1, padding:8, background:adminTab==="ai"?"#6366f1":"#222", border:"none", borderRadius:6, color:"#fff"}}>AI Generator</button>
@@ -531,22 +308,48 @@ export default function App() {
             {adminTab === "fix" && (
               <div style={{background:"#0f0f25", padding:15, borderRadius:12, border:"1px solid #ef4444"}}>
                 <h4>🛠 Live Data Debugger</h4>
-                <p style={{fontSize:12, color:"#aaa"}}>ആപ്പിലേക്ക് ലോഡ് ചെയ്ത ആകെ ഡാറ്റാബേസ് ചോദ്യങ്ങൾ: <strong>{fbQ.length}</strong></p>
-                <div style={{background:"#000", padding:10, borderRadius:8, maxHeight:150, overflowY:"auto", fontSize:11, fontFamily:"monospace", color:"#10b981"}}>
-                  {fbQ.length === 0 ? "No data fetched from Firebase yet." : JSON.stringify(fbQ.slice(0, 2), null, 2)}
+                <p style={{fontSize:12, color:"#10b981", fontWeight:"bold"}}>Total DB Questions Fetched: {fbQ.length}</p>
+
+                <div style={{background:"rgba(0,0,0,0.3)", padding:12, borderRadius:8, marginTop:10}}>
+                  <div style={{color:"#f59e0b", fontWeight:"bold", marginBottom:6}}>⚠ Orphaned Questions</div>
+                  <p style={{fontSize:11, color:"#94a3b8", marginBottom:10}}>കാറ്റഗറി ഡിലീറ്റ് ആയതുകൊണ്ട് വഴിതെറ്റിയ ചോദ്യങ്ങൾ.</p>
+                  
+                  {Object.entries(fbQ.reduce((acc, q) => { 
+                    if(!categories.find(c=>String(c.id).toLowerCase().trim() === String(q.cat).toLowerCase().trim())){ 
+                      acc[q.cat]=(acc[q.cat]||0)+1;
+                    } 
+                    return acc; 
+                  }, {})).map(([catId, count]) => (
+                    <div key={catId} style={{background:"rgba(255,255,255,0.05)", padding:8, borderRadius:6, marginBottom:6}}>
+                      <div style={{fontSize:12, color:"#e2e8f0"}}>Category Name: <strong style={{color:"#ef4444"}}>{catId}</strong> ({count} Qs)</div>
+                      
+                      <button onClick={async () => {
+                        if(window.confirm(`ഈ ${count} ചോദ്യങ്ങളെല്ലാം LDC കാറ്റഗറിയിലേക്ക് മാറ്റട്ടേ?`)) {
+                          showNotif("⏳ Fixing questions...");
+                          const orphanedQs = fbQ.filter(q => String(q.cat).toLowerCase().trim() === String(catId).toLowerCase().trim());
+                          for(let q of orphanedQs) {
+                            await update(ref(db, `questions/${q.id}`), { cat: "ldc" });
+                          }
+                          showNotif("✅ Fixed successfully!");
+                        }
+                      }} style={{background:"#6366f1", color:"#fff", border:"none", padding:"6px 10px", borderRadius:6, fontSize:11, marginTop:8, width:"100%"}}>
+                        Recover to LDC Category 🚀
+                      </button>
+                    </div>
+                  ))}
+                  {Object.keys(fbQ.reduce((acc, q) => { if(!categories.find(c=>String(c.id).toLowerCase().trim() === String(q.cat).toLowerCase().trim())) acc[q.cat]=1; return acc; }, {})).length === 0 && (
+                    <div style={{fontSize:11, color:"#10b981"}}>എല്ലാ ചോദ്യങ്ങൾക്കും കാറ്റഗറിയുണ്ട്! കുഴപ്പങ്ങളൊന്നുമില്ല.</div>
+                  )}
                 </div>
+
                 <button onClick={async () => {
-                  if (fbQ.length === 0) { showNotif("തിരുത്താൻ ചോദ്യങ്ങളൊന്നും ലഭിച്ചിട്ടില്ല!", "error"); return; }
-                  showNotif("⏳ Fixing Category Formats...");
-                  for (let q of fbQ) {
-                    if (q.id) {
-                      const cleanCat = q.cat ? String(q.cat).toLowerCase().trim() : "ldc";
-                      await update(ref(db, `questions/${q.id}`), { cat: cleanCat });
-                    }
-                  }
-                  showNotif("✅ All Database categories synchronized!");
+                  showNotif("⏳ Syncing from Firebase...");
+                  const snap = await get(ref(db, "questions"));
+                  const qs = []; if(snap.exists()) snap.forEach(c => qs.push({id:c.key,...c.val()}));
+                  setFbQ(qs);
+                  showNotif(`✅ Sync Done! Fetched ${qs.length} questions.`);
                 }} style={{width:"100%", padding:10, background:"#10b981", border:"none", borderRadius:8, color:"#fff", fontWeight:"bold", marginTop:10, cursor:"pointer"}}>
-                  🔀 Auto-Fix & Sync Mismatched Categories
+                  🔄 Force Fetch Database
                 </button>
               </div>
             )}
@@ -554,7 +357,6 @@ export default function App() {
             {adminTab === "ai" && <PuterQuizGenerator db={db} categories={categories} user={user} showNotif={showNotif} />}
           </div>
         )}
-
       </div>
     </div>
   );
