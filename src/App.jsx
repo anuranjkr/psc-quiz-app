@@ -85,7 +85,7 @@ function PuterQuizGenerator({ db, categories, user, showNotif }) {
   const [difficulty, setDifficulty] = useState("medium");
   const [includeMalayalam, setIncludeMalayalam] = useState(false);
   const [generatedQs, setGeneratedQs] = useState([]);
-  const [genStatus, setGenStatus] = useState("idle"); // idle | loading | done | error
+  const [genStatus, setGenStatus] = useState("idle");
   const [genMsg, setGenMsg] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
   const [editingIdx, setEditingIdx] = useState(null);
@@ -96,14 +96,23 @@ function PuterQuizGenerator({ db, categories, user, showNotif }) {
     if (!window.puter) { setGenMsg("❌ Puter.js load ആയിട്ടില്ല! index.html-ൽ script ചേർക്കുക."); return; }
 
     setGenStatus("loading");
-    setGenMsg("🤖 Puter AI (Claude) generating questions...");
+    setGenMsg("🤖 Puter AI-യുമായി ബന്ധിപ്പിക്കുന്നു...");
     setGeneratedQs([]);
 
-    const malayalamInstruction = includeMalayalam
-      ? `Also provide a Malayalam translation of the question in the "qm" field.`
-      : `Leave "qm" as empty string "".`;
+    try {
+      // 1. Puter Login ചെയ്തിട്ടുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
+      if (!window.puter.isSignedIn()) {
+         setGenMsg("🔐 Puter അക്കൗണ്ടിലേക്ക് ലോഗിൻ ചെയ്യുന്നു... (Pop-up allow ചെയ്യുക)");
+         await window.puter.signIn();
+      }
 
-    const prompt = `You are an expert quiz creator for Kerala PSC (Public Service Commission) exams.
+      setGenMsg("🤖 Puter AI (Claude) generating questions...");
+
+      const malayalamInstruction = includeMalayalam
+        ? `Also provide a Malayalam translation of the question in the "qm" field.`
+        : `Leave "qm" as empty string "".`;
+
+      const prompt = `You are an expert quiz creator for Kerala PSC (Public Service Commission) exams.
 
 Generate exactly ${qCount} multiple choice questions about the topic: "${topic}"
 Difficulty level: ${difficulty}
@@ -132,15 +141,20 @@ Respond with ONLY a valid JSON array. No markdown, no preamble. Example format:
 The "answer" field must be 0, 1, 2, or 3 (index of correct option in options array).
 Generate ${qCount} questions now:`;
 
-    try {
-      const response = await window.puter.ai.chat(prompt);
+      // 2. Timeout ചേർക്കുന്നു (30 സെക്കൻഡിനുള്ളിൽ മറുപടി വന്നില്ലെങ്കിൽ എറർ കാണിക്കും)
+      const puterPromise = window.puter.ai.chat(prompt);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Puter AI പ്രതികരിക്കുന്നില്ല (Timeout). വീണ്ടും ശ്രമിക്കുക.")), 30000)
+      );
+
+      const response = await Promise.race([puterPromise, timeoutPromise]);
       let rawText = typeof response === 'string' ? response : (response?.text || response?.message?.content || String(response));
 
       let cleaned = rawText.trim();
       cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
       
       const arrMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (!arrMatch) throw new Error("No JSON array found in response");
+      if (!arrMatch) throw new Error("AI തന്ന മറുപടിയിൽ പ്രശ്നമുണ്ട്. വീണ്ടും Generate ചെയ്യുക.");
 
       const parsed = JSON.parse(arrMatch[0]);
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Empty or invalid questions array");
@@ -160,9 +174,11 @@ Generate ${qCount} questions now:`;
       setGeneratedQs(normalized);
       setGenStatus("done");
       setGenMsg(`✅ ${normalized.length} questions generated!`);
+      
     } catch (e) {
       setGenStatus("error");
       setGenMsg(`❌ Error: ${e.message}`);
+      console.error("Puter AI Error:", e);
     }
   };
 
@@ -407,7 +423,6 @@ export default function App() {
   const [notif, setNotif] = useState(null);
   const showNotif = (msg, type="success") => { setNotif({msg,type}); setTimeout(()=>setNotif(null),3000); };
 
-  // ── Auth listener ──
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
