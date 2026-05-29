@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
 import {
   getAuth, signInWithPopup, GoogleAuthProvider,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
@@ -20,9 +21,11 @@ const firebaseConfig = {
   storageBucket: "psc-quiz-kerala.firebasestorage.app",
   messagingSenderId: "100637065162",
   appId: "1:100637065162:web:d492ed8ff24718ca215933",
+  measurementId: "G-FZ12HPFRE5"
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
+const analytics = getAnalytics(firebaseApp);
 const auth = getAuth(firebaseApp);
 const db = getDatabase(firebaseApp);
 const gProvider = new GoogleAuthProvider();
@@ -439,7 +442,6 @@ export default function App() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [chatMsgs]);
 
   const loadData = (uid, admin) => {
-    // 🔴 FETCHING QUESTIONS FROM FIREBASE 🔴
     onValue(ref(db,"questions"), snap => {
       const qs = []; 
       if(snap.exists()) {
