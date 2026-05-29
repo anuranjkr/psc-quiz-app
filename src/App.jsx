@@ -27,7 +27,9 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const analytics = getAnalytics(firebaseApp);
 const auth = getAuth(firebaseApp);
-const db = getDatabase(firebaseApp);
+
+// 🔴 ഇതാണ് പ്രധാന മാറ്റം: ഡാറ്റാബേസ് URL നേരിട്ട് നൽകി ഫോഴ്സ് ചെയ്യുന്നു 🔴
+const db = getDatabase(firebaseApp, "https://psc-quiz-kerala-default-rtdb.asia-southeast1.firebasedatabase.app");
 const gProvider = new GoogleAuthProvider();
 
 // ─── Constants ─────────────────────────────────────────────
@@ -154,7 +156,8 @@ Respond ONLY with a valid JSON array. Example:
 
       if (!rawText.trim()) throw new Error("AI ശൂന്യമായ മറുപടിയാണ് നൽകിയത്.");
 
-      let cleaned = String(rawText).trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+      let cleaned = String(rawText).trim().replace(/^```json\s*/i, "").replace(/^
+```\s*/i, "").replace(/```$/i, "").trim();
       const arrMatch = cleaned.match(/\[[\s\S]*\]/);
       if (!arrMatch) throw new Error("AI തന്ന മറുപടിയിൽ JSON ഫോർമാറ്റ് കണ്ടെത്താൻ കഴിഞ്ഞില്ല.");
 
@@ -446,7 +449,9 @@ export default function App() {
     onValue(ref(db,"questions"), snap => {
       const qs = []; 
       if(snap.exists()) {
-        snap.forEach(c => qs.push({id:c.key,...c.val()}));
+        snap.forEach(c => {
+          qs.push({id:c.key,...c.val()});
+        });
       }
       setFbQ([...qs]); // Force React State Update
     });
@@ -710,7 +715,6 @@ export default function App() {
                     <div key={catId} style={{background:"rgba(255,255,255,0.05)", padding:8, borderRadius:6, marginBottom:6}}>
                       <div style={{fontSize:12, color:"#e2e8f0"}}>ID: <strong>{catId}</strong> ({count} Qs)</div>
                       
-                      {/* ഇവയെ എളുപ്പത്തിൽ 'LDC / LGS' കാറ്റഗറിയിലേക്ക് മാറ്റാനുള്ള ബട്ടൺ */}
                       <button onClick={async () => {
                         if(window.confirm("ഈ ചോദ്യങ്ങളെല്ലാം LDC കാറ്റഗറിയിലേക്ക് മാറ്റട്ടേ?")) {
                           showNotif("⏳ Fixing questions...");
