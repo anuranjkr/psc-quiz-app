@@ -608,7 +608,6 @@ export default function App() {
             <div style={{textAlign:"center",marginBottom:16}}>
               <h1 style={{fontSize:20,fontWeight:900,color:"#e879f9",marginBottom:4}}>Kerala PSC Exam Prep</h1>
               
-              {/* 🔴 ഇത് വളരെ പ്രധാനപ്പെട്ടതാണ്: ഡാറ്റാബേസിൽ നിന്നും എത്ര ചോദ്യങ്ങൾ ആപ്പിൽ എത്തി എന്ന് ഇവിടെ കാണാം 🔴 */}
               <p style={{color:"#475569",fontSize:12, background:"rgba(255,255,255,0.05)", padding:"6px", borderRadius:8, display:"inline-block"}}>
                 Total: {allQ.length} Qs <strong style={{color:"#10b981"}}>(DB-ൽ നിന്ന് കിട്ടിയത്: {fbQ.length})</strong>
               </p>
@@ -679,34 +678,45 @@ export default function App() {
               ))}
             </div>
 
-            {/* 🔴 NEW DATABASE FIX TAB 🔴 */}
+            {/* 🔴 UPDATED DIAGNOSTICS TOOL 🔴 */}
             {adminTab==="fix"&&(
               <div style={{...card(),padding:16,borderLeft:"4px solid #ef4444", background:"rgba(239,68,68,0.05)"}}>
                 <h3 style={{color:"#fca5a5",marginBottom:10}}>🛠️ Database Diagnostics</h3>
-                <p style={{fontSize:12,color:"#cbd5e1",marginBottom:10}}>ഇവിടെ നിങ്ങളുടെ ഡാറ്റാബേസിലെ യഥാർത്ഥ വിവരങ്ങൾ കാണാം.</p>
+                <p style={{fontSize:12,color:"#cbd5e1",marginBottom:10}}>നിങ്ങളുടെ ആപ്പ് കണക്ട് ആയിരിക്കുന്ന ഡാറ്റാബേസിന്റെ വിവരങ്ങൾ.</p>
                 
                 <div style={{background:"rgba(0,0,0,0.3)", padding:12, borderRadius:8, marginBottom:14}}>
-                  <div style={{color:"#10b981", fontWeight:"bold", marginBottom:6}}>✓ Total DB Questions Fetched: {fbQ.length}</div>
-                  <div style={{fontSize:11, color:"#94a3b8"}}>ഇത് 0 ആണെങ്കിൽ, ഫയർബേസ് Read വർക്ക് ചെയ്യുന്നില്ല എന്നാണ് അർത്ഥം.</div>
+                  <div style={{color:"#10b981", fontWeight:"bold", marginBottom:6}}>✓ Total DB Questions: {fbQ.length}</div>
+                  <div style={{fontSize:10, color:"#94a3b8", wordBreak:"break-all", marginBottom:6}}>
+                    <strong>Connected DB URL:</strong><br/>
+                    {db?.app?.options?.databaseURL}
+                  </div>
+                  {fbQ.length > 0 && (
+                    <div style={{fontSize:11, color:"#fbbf24", background:"rgba(255,255,255,0.05)", padding:6, borderRadius:6}}>
+                      <strong>Sample DB Q:</strong> {fbQ[fbQ.length-1].q?.substring(0,60)}...
+                    </div>
+                  )}
                 </div>
 
-                <div style={{background:"rgba(0,0,0,0.3)", padding:12, borderRadius:8, marginBottom:14}}>
-                  <div style={{color:"#f59e0b", fontWeight:"bold", marginBottom:6}}>⚠ Orphaned Questions</div>
-                  <div style={{fontSize:11, color:"#94a3b8", marginBottom:6}}>കാറ്റഗറി ഡിലീറ്റ് ആയതുകൊണ്ട് ഹോം സ്ക്രീനിൽ കാണിക്കാത്ത ചോദ്യങ്ങൾ.</div>
-                  <ul style={{fontSize:11, color:"#e2e8f0", paddingLeft:16}}>
-                    {Object.entries(fbQ.reduce((acc, q) => { if(!categories.find(c=>c.id===q.cat)){ acc[q.cat]=(acc[q.cat]||0)+1;} return acc; }, {})).map(([catId, count]) => (
-                      <li key={catId}>Category ID: <strong>{catId}</strong> ({count} ചോദ്യങ്ങൾ)</li>
-                    ))}
-                  </ul>
-                </div>
+                <button onClick={async () => {
+                  try {
+                    showNotif("⏳ Writing test question...");
+                    const testRef = push(ref(db, "questions"));
+                    await set(testRef, {
+                      q: "System Test Question from Admin Panel", options: ["A","B","C","D"], answer: 0, cat: "ldc", addedBy: "admin_test"
+                    });
+                    showNotif("✅ Test question written successfully!");
+                  } catch(e) {
+                    showNotif("❌ Write failed: " + e.message, "error");
+                  }
+                }} style={{...Btn("rgba(16,185,129,0.2)", "#10b981", {border:"1px solid rgba(16,185,129,0.4)"}), width:"100%", marginBottom:10}}>✍️ Send Test Question to DB</button>
 
                 <button onClick={async () => {
                   showNotif("⏳ Syncing from Firebase...");
                   const snap = await get(ref(db, "questions"));
                   const qs = []; if(snap.exists()) snap.forEach(c => qs.push({id:c.key,...c.val()}));
                   setFbQ(qs);
-                  showNotif(`✅ Forced Sync Done! Fetched ${qs.length} questions.`);
-                }} style={{...Btn("#6366f1"), width:"100%"}}>🔄 Force Sync Database</button>
+                  showNotif(`✅ Force Sync Done! Fetched ${qs.length} questions.`);
+                }} style={{...Btn("#6366f1"), width:"100%"}}>🔄 Force Fetch Database</button>
               </div>
             )}
 
