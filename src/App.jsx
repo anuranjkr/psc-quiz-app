@@ -77,113 +77,93 @@ const timeAgo = (ts) => {
   return Math.floor(d/86400000)+"d ago";
 };
 
-// ─── Gemini AI Quiz Generator Component ────────────────────
-function GeminiQuizGenerator({ db, categories, user, showNotif }) {
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
-  const [topic, setTopic] = useState("");
-  const [targetCat, setTargetCat] = useState("ldc");
-  const [qCount, setQCount] = useState(10);
-  const [difficulty, setDifficulty] = useState("medium");
+// ─── Puter.js AI Quiz Generator ────────────────────────────
+// Uses puter.ai.chat — no API key needed, works via puter.js
+function PuterQuizGenerator({ db, categories, user, showNotif }) {
+  const [topic, setTopic]             = useState("");
+  const [targetCat, setTargetCat]     = useState("ldc");
+  const [qCount, setQCount]           = useState(10);
+  const [difficulty, setDifficulty]   = useState("medium");
   const [includeMalayalam, setIncludeMalayalam] = useState(false);
   const [generatedQs, setGeneratedQs] = useState([]);
-  const [genStatus, setGenStatus] = useState("idle"); // idle | loading | done | error
-  const [genMsg, setGenMsg] = useState("");
+  const [genStatus, setGenStatus]     = useState("idle");
+  const [genMsg, setGenMsg]           = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
-  const [editingIdx, setEditingIdx] = useState(null);
-  const [editQ, setEditQ] = useState(null);
-  const [savedKey, setSavedKey] = useState(!!localStorage.getItem("gemini_api_key"));
+  const [editingIdx, setEditingIdx]   = useState(null);
+  const [editQ, setEditQ]             = useState(null);
+  const [puterReady, setPuterReady]   = useState(false);
+  const [puterError, setPuterError]   = useState("");
 
-  const saveKey = () => {
-    localStorage.setItem("gemini_api_key", geminiKey.trim());
-    setSavedKey(true);
-    showNotif("🔑 API Key saved!");
-  };
-
-  const clearKey = () => {
-    localStorage.removeItem("gemini_api_key");
-    setGeminiKey("");
-    setSavedKey(false);
-    showNotif("Key cleared.", "error");
-  };
+  // Load puter.js dynamically
+  useEffect(() => {
+    if (window.puter) { setPuterReady(true); return; }
+    const script = document.createElement("script");
+    script.src = "https://js.puter.com/v2/";
+    script.async = true;
+    script.onload = () => {
+      if (window.puter) setPuterReady(true);
+      else setPuterError("Puter.js load failed.");
+    };
+    script.onerror = () => setPuterError("Cannot load Puter.js. Check internet.");
+    document.head.appendChild(script);
+  }, []);
 
   const generateQuiz = async () => {
-    const key = geminiKey.trim();
-    if (!key) { setGenMsg("❌ Gemini API Key ഇടൂ!"); return; }
+    if (!puterReady) { setGenMsg("❌ Puter.js still loading..."); return; }
     if (!topic.trim()) { setGenMsg("❌ Topic ഇടൂ!"); return; }
 
     setGenStatus("loading");
-    setGenMsg("🤖 Gemini generating questions...");
+    setGenMsg("🤖 Puter AI generating questions...");
     setGeneratedQs([]);
 
     const malayalamInstruction = includeMalayalam
       ? `Also provide a Malayalam translation of the question in the "qm" field.`
-      : `Leave "qm" as empty string "".`;
+      : `Set "qm" as empty string "".`;
 
     const prompt = `You are an expert quiz creator for Kerala PSC (Public Service Commission) exams.
 
-Generate exactly ${qCount} multiple choice questions about the topic: "${topic}"
-Difficulty level: ${difficulty}
+Generate exactly ${qCount} multiple choice questions about: "${topic}"
+Difficulty: ${difficulty}
 Category: ${categories.find(c => c.id === targetCat)?.label || targetCat}
 
-Requirements:
+Rules:
 - Questions must be relevant to Kerala PSC exam preparation
-- Each question must have exactly 4 options
+- Each question must have exactly 4 options (A, B, C, D)
 - Only ONE correct answer per question
 - Include a clear explanation for the correct answer
-- Questions should be factually accurate
+- Questions must be factually accurate
 - ${malayalamInstruction}
-- Vary question types (who/what/when/where/why/how)
 
-Respond with ONLY a valid JSON array. No markdown, no backticks, no preamble. Example format:
+Respond with ONLY a valid JSON array, no markdown, no backticks:
 [
   {
-    "q": "Question text in English",
-    "qm": "ചോദ്യം മലയാളത്തിൽ",
+    "q": "Question in English",
+    "qm": "",
     "options": ["Option A", "Option B", "Option C", "Option D"],
     "answer": 0,
-    "explanation": "Explanation why this is correct"
+    "explanation": "Why this is correct"
   }
 ]
 
-The "answer" field must be 0, 1, 2, or 3 (index of correct option in options array).
-Generate ${qCount} questions now:`;
+"answer" = 0-3 index of correct option. Generate ${qCount} questions now:`;
 
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 8192,
-            }
-          })
-        }
-      );
+      const response = await window.puter.ai.chat(prompt, { model: "gpt-4o-mini" });
+      let rawText = "";
+      if (typeof response === "string") rawText = response;
+      else if (response?.message?.content) rawText = response.message.content;
+      else if (response?.content) rawText = response.content;
+      else rawText = JSON.stringify(response);
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err?.error?.message || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-      // Clean and parse JSON
-      let cleaned = rawText.trim();
-      // Remove markdown code blocks if present
-      cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-      // Extract JSON array
+      // Clean and parse
+      let cleaned = rawText.trim()
+        .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
       const arrMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (!arrMatch) throw new Error("No JSON array found in response");
+      if (!arrMatch) throw new Error("No JSON array found in AI response");
 
       const parsed = JSON.parse(arrMatch[0]);
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Empty or invalid questions array");
+      if (!Array.isArray(parsed) || !parsed.length) throw new Error("Empty questions array");
 
-      // Validate and normalize each question
       const normalized = parsed.map((q, i) => ({
         q: q.q || `Question ${i + 1}`,
         qm: q.qm || "",
@@ -205,34 +185,11 @@ Generate ${qCount} questions now:`;
     }
   };
 
-  const toggleSelect = (idx) => {
-    setGeneratedQs(prev => prev.map((q, i) => i === idx ? { ...q, _selected: !q._selected } : q));
-  };
-
-  const selectAll = () => setGeneratedQs(prev => prev.map(q => ({ ...q, _selected: true })));
-  const deselectAll = () => setGeneratedQs(prev => prev.map(q => ({ ...q, _selected: false })));
-
-  const startEdit = (idx) => {
-    setEditingIdx(idx);
-    setEditQ({ ...generatedQs[idx] });
-  };
-
-  const saveEdit = () => {
-    setGeneratedQs(prev => prev.map((q, i) => i === editingIdx ? { ...editQ } : q));
-    setEditingIdx(null);
-    setEditQ(null);
-    showNotif("✏️ Question updated!");
-  };
-
-  const removeQ = (idx) => {
-    setGeneratedQs(prev => prev.filter((_, i) => i !== idx));
-    showNotif("Question removed.", "error");
-  };
-
+  // Upload all selected directly to Firebase
   const uploadSelected = async () => {
     const toUpload = generatedQs.filter(q => q._selected);
     if (!toUpload.length) { showNotif("❌ Select at least one question!", "error"); return; }
-    setUploadStatus(`⏳ Uploading ${toUpload.length} questions...`);
+    setUploadStatus(`⏳ Uploading ${toUpload.length} questions to ${categories.find(c=>c.id===targetCat)?.label}...`);
     let count = 0;
     for (const q of toUpload) {
       const { _selected, ...qData } = q;
@@ -240,15 +197,32 @@ Generate ${qCount} questions now:`;
         ...qData,
         addedBy: user.email,
         addedAt: serverTimestamp(),
-        source: "gemini_ai",
+        source: "puter_ai",
         topic: topic,
       });
       count++;
     }
-    setUploadStatus(`✅ ${count} questions uploaded to Firebase!`);
+    setUploadStatus(`✅ ${count} questions added to "${categories.find(c=>c.id===targetCat)?.label}"!`);
     showNotif(`🎉 ${count} AI questions uploaded!`);
     setGeneratedQs(prev => prev.filter(q => !q._selected));
     setTimeout(() => setUploadStatus(""), 4000);
+  };
+
+  const toggleSelect = (idx) =>
+    setGeneratedQs(prev => prev.map((q, i) => i === idx ? { ...q, _selected: !q._selected } : q));
+
+  const selectAll   = () => setGeneratedQs(prev => prev.map(q => ({ ...q, _selected: true })));
+  const deselectAll = () => setGeneratedQs(prev => prev.map(q => ({ ...q, _selected: false })));
+
+  const startEdit = (idx) => { setEditingIdx(idx); setEditQ({ ...generatedQs[idx] }); };
+  const saveEdit  = () => {
+    setGeneratedQs(prev => prev.map((q, i) => i === editingIdx ? { ...editQ } : q));
+    setEditingIdx(null); setEditQ(null);
+    showNotif("✏️ Question updated!");
+  };
+  const removeQ = (idx) => {
+    setGeneratedQs(prev => prev.filter((_, i) => i !== idx));
+    showNotif("Question removed.", "error");
   };
 
   const Inp = { width:"100%", background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", color:"#e2e8f0", fontSize:13, marginBottom:10, fontFamily:"inherit", outline:"none" };
@@ -258,46 +232,33 @@ Generate ${qCount} questions now:`;
   const Btn = (bg, col="#fff", ex={}) => ({ background:bg, color:col, border:"none", borderRadius:12, padding:"12px 16px", cursor:"pointer", fontWeight:700, fontSize:13, fontFamily:"inherit", transition:"all 0.2s", ...ex });
 
   const selectedCount = generatedQs.filter(q => q._selected).length;
+  const targetCatInfo = categories.find(c => c.id === targetCat) || { label:"Category", icon:"📋", color:"#6366f1" };
 
   return (
     <div>
       {/* Header Banner */}
-      <div style={{ background:"linear-gradient(135deg,rgba(16,185,129,0.15),rgba(6,182,212,0.1))", border:"1px solid rgba(16,185,129,0.25)", borderRadius:16, padding:"16px 18px", marginBottom:14, display:"flex", alignItems:"center", gap:14 }}>
-        <div style={{ width:52, height:52, background:"linear-gradient(135deg,#10b981,#06b6d4)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", fontSize:26, flexShrink:0 }}>🤖</div>
+      <div style={{ background:"linear-gradient(135deg,rgba(99,102,241,0.18),rgba(139,92,246,0.12))", border:"1px solid rgba(99,102,241,0.3)", borderRadius:16, padding:"16px 18px", marginBottom:14, display:"flex", alignItems:"center", gap:14 }}>
+        <div style={{ width:54, height:54, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, flexShrink:0 }}>🤖</div>
         <div>
-          <div style={{ fontWeight:800, fontSize:15, color:"#6ee7b7", marginBottom:2 }}>Gemini AI Quiz Generator</div>
-          <div style={{ fontSize:11, color:"#475569", lineHeight:1.4 }}>Topic നൽകൂ → AI automatically MCQ questions create ചെയ്യും → Firebase-ലേക്ക് upload ചെയ്യൂ!</div>
+          <div style={{ fontWeight:800, fontSize:15, color:"#a5b4fc", marginBottom:3 }}>Puter AI Quiz Generator</div>
+          <div style={{ fontSize:11, color:"#475569", lineHeight:1.5 }}>No API key needed! Topic choose ചെയ്ത് folder select ചെയ്ത് Generate ചെയ്യൂ — AI automatically questions add ചെയ്യും!</div>
         </div>
       </div>
 
-      {/* API Key Section */}
-      <div style={{ ...card(), padding:14, marginBottom:12, borderLeft:"3px solid #f59e0b" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-          <span style={{ fontSize:14 }}>🔑</span>
-          <span style={{ fontWeight:700, color:"#fbbf24", fontSize:13 }}>Gemini API Key</span>
-          {savedKey && <span style={{ fontSize:10, background:"rgba(16,185,129,0.15)", color:"#10b981", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>✅ Saved</span>}
-        </div>
-        <div style={{ fontSize:11, color:"#64748b", marginBottom:8 }}>
-          Get free key: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color:"#6366f1" }}>aistudio.google.com/apikey</a>
-        </div>
-        <input
-          value={geminiKey}
-          onChange={e => setGeminiKey(e.target.value)}
-          placeholder="AIzaSy..."
-          type="password"
-          style={{ ...Inp, marginBottom:8, fontFamily:"monospace" }}
-        />
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={saveKey} style={{ ...Btn("linear-gradient(135deg,#f59e0b,#fbbf24)", "#000"), flex:1, padding:"9px 0", fontSize:12 }}>💾 Save Key</button>
-          {savedKey && <button onClick={clearKey} style={{ ...Btn("rgba(239,68,68,0.15)", "#ef4444"), padding:"9px 14px", fontSize:12 }}>🗑️</button>}
+      {/* Puter Status */}
+      <div style={{ ...card(), padding:"10px 14px", marginBottom:12, display:"flex", alignItems:"center", gap:10, borderLeft:`3px solid ${puterReady?"#10b981":"#f59e0b"}` }}>
+        <div style={{ width:10, height:10, borderRadius:"50%", background:puterReady?"#10b981":"#f59e0b", flexShrink:0, boxShadow:puterReady?"0 0 8px #10b981":"0 0 8px #f59e0b" }}/>
+        <div style={{ flex:1, fontSize:12, color:puterReady?"#10b981":"#f59e0b", fontWeight:700 }}>
+          {puterError ? `❌ ${puterError}` : puterReady ? "✅ Puter AI Ready — No API key required!" : "⏳ Loading Puter AI..."}
         </div>
       </div>
 
       {/* Generator Form */}
-      <div style={{ ...card(), padding:14, marginBottom:12, borderLeft:"3px solid #10b981" }}>
-        <div style={{ fontWeight:700, color:"#10b981", marginBottom:12, fontSize:13 }}>⚙️ Generator Settings</div>
+      <div style={{ ...card(), padding:16, marginBottom:12, borderLeft:"3px solid #6366f1" }}>
+        <div style={{ fontWeight:800, color:"#a5b4fc", marginBottom:14, fontSize:14 }}>⚙️ Generator Settings</div>
 
-        <label style={{ fontSize:11, color:"#64748b", fontWeight:600, display:"block", marginBottom:5 }}>Topic / Subject *</label>
+        {/* Topic */}
+        <label style={{ fontSize:11, color:"#64748b", fontWeight:700, display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:0.8 }}>📝 Topic / Subject *</label>
         <input
           value={topic}
           onChange={e => setTopic(e.target.value)}
@@ -305,61 +266,70 @@ Generate ${qCount} questions now:`;
           style={Inp}
         />
 
-        <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+        {/* Category — THE FOLDER */}
+        <label style={{ fontSize:11, color:"#64748b", fontWeight:700, display:"block", marginBottom:8, textTransform:"uppercase", letterSpacing:0.8 }}>📁 Target Folder (Category)</label>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>
+          {categories.map(c => (
+            <button key={c.id} onClick={() => setTargetCat(c.id)}
+              style={{ padding:"7px 12px", background:targetCat===c.id?`${c.color}30`:"rgba(255,255,255,0.05)", border:`1.5px solid ${targetCat===c.id?c.color:"rgba(255,255,255,0.1)"}`, borderRadius:20, color:targetCat===c.id?c.color:"#64748b", cursor:"pointer", fontWeight:700, fontSize:11, transition:"all 0.2s" }}>
+              {c.icon} {c.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ ...glass(), padding:"8px 12px", marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:18 }}>{targetCatInfo.icon}</span>
+          <span style={{ fontSize:12, color:"#94a3b8" }}>Questions will be added to: </span>
+          <span style={{ fontSize:13, fontWeight:800, color:targetCatInfo.color }}>{targetCatInfo.label}</span>
+        </div>
+
+        {/* Count + Difficulty */}
+        <div style={{ display:"flex", gap:8, marginBottom:12 }}>
           <div style={{ flex:1 }}>
-            <label style={{ fontSize:11, color:"#64748b", fontWeight:600, display:"block", marginBottom:5 }}>Category</label>
-            <select value={targetCat} onChange={e => setTargetCat(e.target.value)} style={{ ...Sel, marginBottom:0 }}>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
-            </select>
-          </div>
-          <div style={{ flex:1 }}>
-            <label style={{ fontSize:11, color:"#64748b", fontWeight:600, display:"block", marginBottom:5 }}>No. of Questions</label>
-            <select value={qCount} onChange={e => setQCount(Number(e.target.value))} style={{ ...Sel, marginBottom:0 }}>
-              {[5, 10, 15, 20, 25, 30].map(n => <option key={n} value={n}>{n} Questions</option>)}
-            </select>
+            <label style={{ fontSize:11, color:"#64748b", fontWeight:700, display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:0.8 }}>🔢 No. of Questions</label>
+            <div style={{ display:"flex", gap:4 }}>
+              {[5, 10, 15, 20].map(n => (
+                <button key={n} onClick={() => setQCount(n)}
+                  style={{ flex:1, padding:"9px 0", background:qCount===n?"linear-gradient(135deg,#6366f1,#8b5cf6)":"rgba(255,255,255,0.05)", border:`1px solid ${qCount===n?"#6366f1":"rgba(255,255,255,0.1)"}`, borderRadius:10, color:qCount===n?"#fff":"#64748b", cursor:"pointer", fontWeight:800, fontSize:13, transition:"all 0.2s" }}>{n}</button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <label style={{ fontSize:11, color:"#64748b", fontWeight:600, display:"block", marginBottom:6 }}>Difficulty</label>
-        <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+        <label style={{ fontSize:11, color:"#64748b", fontWeight:700, display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:0.8 }}>🎯 Difficulty</label>
+        <div style={{ display:"flex", gap:6, marginBottom:12 }}>
           {[["easy","🟢 Easy","#10b981"],["medium","🟡 Medium","#f59e0b"],["hard","🔴 Hard","#ef4444"]].map(([v,l,c]) => (
-            <button key={v} onClick={() => setDifficulty(v)} style={{ flex:1, padding:"8px 0", background:difficulty===v?`${c}25`:"rgba(255,255,255,0.05)", border:`1.5px solid ${difficulty===v?c:"rgba(255,255,255,0.1)"}`, borderRadius:10, color:difficulty===v?c:"#64748b", cursor:"pointer", fontWeight:700, fontSize:12, transition:"all 0.2s" }}>{l}</button>
+            <button key={v} onClick={() => setDifficulty(v)}
+              style={{ flex:1, padding:"9px 0", background:difficulty===v?`${c}25`:"rgba(255,255,255,0.05)", border:`1.5px solid ${difficulty===v?c:"rgba(255,255,255,0.1)"}`, borderRadius:10, color:difficulty===v?c:"#64748b", cursor:"pointer", fontWeight:700, fontSize:12, transition:"all 0.2s" }}>{l}</button>
           ))}
         </div>
 
         {/* Malayalam toggle */}
-        <button
-          onClick={() => setIncludeMalayalam(!includeMalayalam)}
-          style={{ display:"flex", alignItems:"center", gap:10, width:"100%", padding:"10px 12px", background:includeMalayalam?"rgba(99,102,241,0.12)":"rgba(255,255,255,0.04)", border:`1.5px solid ${includeMalayalam?"#6366f1":"rgba(255,255,255,0.1)"}`, borderRadius:12, cursor:"pointer", marginBottom:14, transition:"all 0.2s" }}
-        >
+        <button onClick={() => setIncludeMalayalam(!includeMalayalam)}
+          style={{ display:"flex", alignItems:"center", gap:10, width:"100%", padding:"10px 12px", background:includeMalayalam?"rgba(99,102,241,0.12)":"rgba(255,255,255,0.04)", border:`1.5px solid ${includeMalayalam?"#6366f1":"rgba(255,255,255,0.1)"}`, borderRadius:12, cursor:"pointer", marginBottom:14, transition:"all 0.2s" }}>
           <div style={{ width:38, height:22, borderRadius:11, background:includeMalayalam?"#6366f1":"rgba(255,255,255,0.1)", position:"relative", transition:"all 0.2s", flexShrink:0 }}>
             <div style={{ position:"absolute", top:3, left:includeMalayalam?18:3, width:16, height:16, borderRadius:"50%", background:"#fff", transition:"all 0.2s" }}/>
           </div>
           <div style={{ textAlign:"left" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:includeMalayalam?"#a5b4fc":"#64748b" }}>🔤 Include Malayalam Translation</div>
-            <div style={{ fontSize:10, color:"#475569" }}>Questions-ൽ Malayalam text കൂടി add ചെയ്യും</div>
+            <div style={{ fontSize:13, fontWeight:700, color:includeMalayalam?"#a5b4fc":"#64748b" }}>🔤 Malayalam Translation</div>
+            <div style={{ fontSize:10, color:"#475569" }}>Questions-ൽ Malayalam text കൂടി include ചെയ്യും</div>
           </div>
         </button>
 
         {genMsg && (
-          <div style={{ fontSize:13, marginBottom:10, padding:"10px 12px", borderRadius:10, background:genStatus==="done"?"rgba(16,185,129,0.1)":genStatus==="error"?"rgba(239,68,68,0.1)":"rgba(99,102,241,0.1)", color:genStatus==="done"?"#10b981":genStatus==="error"?"#ef4444":"#a5b4fc", border:`1px solid ${genStatus==="done"?"rgba(16,185,129,0.2)":genStatus==="error"?"rgba(239,68,68,0.2)":"rgba(99,102,241,0.2)"}` }}>
+          <div style={{ fontSize:13, marginBottom:12, padding:"10px 12px", borderRadius:10,
+            background:genStatus==="done"?"rgba(16,185,129,0.1)":genStatus==="error"?"rgba(239,68,68,0.1)":"rgba(99,102,241,0.1)",
+            color:genStatus==="done"?"#10b981":genStatus==="error"?"#ef4444":"#a5b4fc",
+            border:`1px solid ${genStatus==="done"?"rgba(16,185,129,0.25)":genStatus==="error"?"rgba(239,68,68,0.25)":"rgba(99,102,241,0.25)"}` }}>
             {genMsg}
           </div>
         )}
 
-        <button
-          onClick={generateQuiz}
-          disabled={genStatus === "loading"}
-          style={{ ...Btn("linear-gradient(135deg,#10b981,#06b6d4)"), width:"100%", padding:14, fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8, opacity:genStatus==="loading"?0.7:1 }}
-        >
-          {genStatus === "loading" ? (
-            <>
-              <span style={{ display:"inline-block", animation:"spin 1s linear infinite" }}>⚙️</span>
-              <span>Generating...</span>
-            </>
-          ) : (
-            <>🤖 Generate {qCount} Questions with AI</>
-          )}
+        <button onClick={generateQuiz} disabled={genStatus==="loading"||!puterReady}
+          style={{ ...Btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width:"100%", padding:14, fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", gap:8, opacity:(genStatus==="loading"||!puterReady)?0.65:1 }}>
+          {genStatus==="loading"
+            ? <><span style={{ display:"inline-block", animation:"spin 1s linear infinite" }}>⚙️</span><span>Generating {qCount} Questions...</span></>
+            : <>🤖 Generate {qCount} Questions → {targetCatInfo.icon} {targetCatInfo.label}</>
+          }
         </button>
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       </div>
@@ -368,62 +338,62 @@ Generate ${qCount} questions now:`;
       {generatedQs.length > 0 && (
         <div>
           {/* Toolbar */}
-          <div style={{ ...glass(), padding:"10px 14px", marginBottom:10, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <div style={{ ...glass(), padding:"10px 14px", marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
             <div style={{ flex:1, fontSize:13, fontWeight:700, color:"#e2e8f0" }}>
-              📋 {generatedQs.length} Questions
-              <span style={{ color:"#10b981", marginLeft:6, fontSize:12 }}>{selectedCount} selected</span>
+              📋 {generatedQs.length} Generated
+              <span style={{ color:"#10b981", marginLeft:8, fontSize:12 }}>{selectedCount} selected</span>
             </div>
-            <button onClick={selectAll} style={{ ...Btn("rgba(99,102,241,0.15)", "#a5b4fc"), padding:"6px 10px", fontSize:11 }}>☑️ All</button>
-            <button onClick={deselectAll} style={{ ...Btn("rgba(255,255,255,0.06)", "#64748b"), padding:"6px 10px", fontSize:11 }}>☐ None</button>
+            <button onClick={selectAll}   style={{ ...Btn("rgba(99,102,241,0.15)","#a5b4fc"), padding:"6px 10px", fontSize:11 }}>☑️ All</button>
+            <button onClick={deselectAll} style={{ ...Btn("rgba(255,255,255,0.06)","#64748b"), padding:"6px 10px", fontSize:11 }}>☐ None</button>
           </div>
 
-          {/* Questions List */}
+          {/* Question cards */}
           {generatedQs.map((q, idx) => (
-            <div key={idx} style={{ ...card(), padding:12, marginBottom:8, borderLeft:`3px solid ${q._selected?"#10b981":"#334155"}`, opacity:q._selected?1:0.5, transition:"all 0.2s" }}>
+            <div key={idx} style={{ ...card(), padding:12, marginBottom:8, borderLeft:`3px solid ${q._selected?targetCatInfo.color:"#334155"}`, opacity:q._selected?1:0.5, transition:"all 0.2s" }}>
               {editingIdx === idx ? (
-                // Edit Mode
                 <div>
                   <div style={{ fontSize:11, color:"#6366f1", fontWeight:700, marginBottom:8 }}>✏️ Editing Q{idx+1}</div>
-                  <input value={editQ.q} onChange={e => setEditQ({...editQ, q:e.target.value})} placeholder="Question (English)" style={{ ...Inp, fontSize:12 }}/>
-                  <input value={editQ.qm} onChange={e => setEditQ({...editQ, qm:e.target.value})} placeholder="Question (Malayalam) — Optional" style={{ ...Inp, fontSize:12 }}/>
-                  {editQ.options.map((opt, oi) => (
-                    <input key={oi} value={opt} onChange={e => { const newOpts=[...editQ.options]; newOpts[oi]=e.target.value; setEditQ({...editQ,options:newOpts}); }} placeholder={`Option ${["A","B","C","D"][oi]}`} style={{ ...Inp, fontSize:12, borderColor:editQ.answer===oi?"#10b981":"rgba(255,255,255,0.12)" }}/>
+                  <input value={editQ.q} onChange={e=>setEditQ({...editQ,q:e.target.value})} placeholder="Question (English)" style={{...Inp,fontSize:12}}/>
+                  <input value={editQ.qm} onChange={e=>setEditQ({...editQ,qm:e.target.value})} placeholder="Question (Malayalam) — Optional" style={{...Inp,fontSize:12}}/>
+                  {editQ.options.map((opt,oi)=>(
+                    <input key={oi} value={opt} onChange={e=>{const o=[...editQ.options];o[oi]=e.target.value;setEditQ({...editQ,options:o});}} placeholder={`Option ${["A","B","C","D"][oi]}`} style={{...Inp,fontSize:12,borderColor:editQ.answer===oi?"#10b981":"rgba(255,255,255,0.12)"}}/>
                   ))}
-                  <div style={{ display:"flex", gap:6, marginBottom:10 }}>
-                    <select value={editQ.answer} onChange={e => setEditQ({...editQ,answer:parseInt(e.target.value)})} style={{ ...Sel, flex:1, marginBottom:0, fontSize:12 }}>
-                      <option value={0}>✅ Answer: A</option><option value={1}>✅ Answer: B</option><option value={2}>✅ Answer: C</option><option value={3}>✅ Answer: D</option>
-                    </select>
-                  </div>
-                  <input value={editQ.explanation} onChange={e => setEditQ({...editQ, explanation:e.target.value})} placeholder="Explanation" style={{ ...Inp, fontSize:12 }}/>
-                  <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={saveEdit} style={{ ...Btn("linear-gradient(135deg,#10b981,#059669)"), flex:1, padding:"9px 0", fontSize:12 }}>✅ Save</button>
-                    <button onClick={() => {setEditingIdx(null);setEditQ(null);}} style={{ ...Btn("rgba(255,255,255,0.06)", "#94a3b8"), flex:1, padding:"9px 0", fontSize:12 }}>Cancel</button>
+                  <select value={editQ.answer} onChange={e=>setEditQ({...editQ,answer:parseInt(e.target.value)})} style={{...Sel,marginBottom:8,fontSize:12}}>
+                    <option value={0}>✅ Answer: A</option><option value={1}>✅ Answer: B</option><option value={2}>✅ Answer: C</option><option value={3}>✅ Answer: D</option>
+                  </select>
+                  <input value={editQ.explanation} onChange={e=>setEditQ({...editQ,explanation:e.target.value})} placeholder="Explanation" style={{...Inp,fontSize:12}}/>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={saveEdit} style={{...Btn("linear-gradient(135deg,#10b981,#059669)"),flex:1,padding:"9px 0",fontSize:12}}>✅ Save</button>
+                    <button onClick={()=>{setEditingIdx(null);setEditQ(null);}} style={{...Btn("rgba(255,255,255,0.06)","#94a3b8"),flex:1,padding:"9px 0",fontSize:12}}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                // View Mode
                 <div>
                   <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-                    <button onClick={() => toggleSelect(idx)} style={{ width:20, height:20, borderRadius:6, background:q._selected?"#10b981":"rgba(255,255,255,0.06)", border:`1.5px solid ${q._selected?"#10b981":"rgba(255,255,255,0.2)"}`, cursor:"pointer", flexShrink:0, marginTop:1, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11 }}>
+                    <button onClick={()=>toggleSelect(idx)} style={{ width:20, height:20, borderRadius:6, background:q._selected?targetCatInfo.color:"rgba(255,255,255,0.06)", border:`1.5px solid ${q._selected?targetCatInfo.color:"rgba(255,255,255,0.2)"}`, cursor:"pointer", flexShrink:0, marginTop:2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, color:"#fff" }}>
                       {q._selected?"✓":""}
                     </button>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:"#f1f5f9", marginBottom:4, lineHeight:1.5 }}>
-                        <span style={{ color:"#6366f1", marginRight:5 }}>Q{idx+1}.</span>{q.q}
+                      <div style={{ fontSize:12, fontWeight:700, color:"#f1f5f9", marginBottom:4, lineHeight:1.55 }}>
+                        <span style={{ color:"#a5b4fc", marginRight:5 }}>Q{idx+1}.</span>{q.q}
                       </div>
                       {q.qm && <div style={{ fontSize:11, color:"#64748b", marginBottom:5 }}>{q.qm}</div>}
                       <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:5 }}>
-                        {q.options.map((opt, oi) => (
+                        {q.options.map((opt,oi) => (
                           <span key={oi} style={{ fontSize:10, padding:"3px 9px", borderRadius:8, background:oi===q.answer?"rgba(16,185,129,0.15)":"rgba(255,255,255,0.05)", color:oi===q.answer?"#10b981":"#64748b", border:`1px solid ${oi===q.answer?"rgba(16,185,129,0.35)":"rgba(255,255,255,0.08)"}`, fontWeight:oi===q.answer?700:400 }}>
-                            {["A","B","C","D"][oi]}: {opt} {oi===q.answer?"✅":""}
+                            {["A","B","C","D"][oi]}: {opt}{oi===q.answer?" ✅":""}
                           </span>
                         ))}
                       </div>
-                      {q.explanation && <div style={{ fontSize:10, color:"#64748b", background:"rgba(245,158,11,0.06)", borderRadius:6, padding:"4px 8px", borderLeft:"2px solid #f59e0b" }}>💡 {q.explanation}</div>}
+                      {q.explanation && (
+                        <div style={{ fontSize:10, color:"#64748b", background:"rgba(245,158,11,0.06)", borderRadius:6, padding:"4px 8px", borderLeft:"2px solid #f59e0b" }}>
+                          💡 {q.explanation}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:4, flexShrink:0 }}>
-                      <button onClick={() => startEdit(idx)} style={{ ...Btn("rgba(99,102,241,0.15)", "#a5b4fc"), padding:"5px 8px", fontSize:11 }}>✏️</button>
-                      <button onClick={() => removeQ(idx)} style={{ ...Btn("rgba(239,68,68,0.1)", "#ef4444"), padding:"5px 8px", fontSize:11 }}>🗑️</button>
+                      <button onClick={()=>startEdit(idx)} style={{...Btn("rgba(99,102,241,0.15)","#a5b4fc"),padding:"5px 8px",fontSize:11}}>✏️</button>
+                      <button onClick={()=>removeQ(idx)}   style={{...Btn("rgba(239,68,68,0.1)","#ef4444"),padding:"5px 8px",fontSize:11}}>🗑️</button>
                     </div>
                   </div>
                 </div>
@@ -431,34 +401,72 @@ Generate ${qCount} questions now:`;
             </div>
           ))}
 
-          {/* Upload Section */}
-          <div style={{ ...card(), padding:14, marginTop:6, borderLeft:"3px solid #6366f1" }}>
+          {/* Upload section */}
+          <div style={{ ...card(), padding:16, marginTop:6, borderLeft:`3px solid ${targetCatInfo.color}` }}>
             {uploadStatus && (
-              <div style={{ fontSize:13, marginBottom:10, padding:"10px 12px", borderRadius:10, background:uploadStatus.includes("✅")?"rgba(16,185,129,0.1)":"rgba(99,102,241,0.1)", color:uploadStatus.includes("✅")?"#10b981":"#a5b4fc" }}>
+              <div style={{ fontSize:13, marginBottom:10, padding:"10px 12px", borderRadius:10,
+                background:uploadStatus.includes("✅")?"rgba(16,185,129,0.1)":"rgba(99,102,241,0.1)",
+                color:uploadStatus.includes("✅")?"#10b981":"#a5b4fc" }}>
                 {uploadStatus}
               </div>
             )}
-            <button
-              onClick={uploadSelected}
-              disabled={selectedCount === 0}
-              style={{ ...Btn("linear-gradient(135deg,#6366f1,#8b5cf6)"), width:"100%", padding:14, fontSize:14, opacity:selectedCount===0?0.5:1 }}
-            >
-              🚀 Upload {selectedCount} Selected Questions to Firebase
+            <button onClick={uploadSelected} disabled={selectedCount===0}
+              style={{ ...Btn(`linear-gradient(135deg,${targetCatInfo.color},${targetCatInfo.color}99)`), width:"100%", padding:14, fontSize:14, opacity:selectedCount===0?0.5:1 }}>
+              🚀 Upload {selectedCount} Questions → {targetCatInfo.icon} {targetCatInfo.label}
             </button>
             <div style={{ fontSize:10, color:"#475569", textAlign:"center", marginTop:6 }}>
-              Category: {categories.find(c=>c.id===targetCat)?.icon} {categories.find(c=>c.id===targetCat)?.label} • Source: Gemini AI
+              Auto-approved • Source: Puter AI • No key needed
             </div>
           </div>
         </div>
       )}
 
-      {/* Empty state */}
-      {genStatus === "idle" && generatedQs.length === 0 && (
-        <div style={{ ...glass(), padding:36, textAlign:"center", color:"#475569" }}>
-          <div style={{ fontSize:44, marginBottom:10 }}>🤖</div>
-          <p style={{ fontSize:13, color:"#475569", lineHeight:1.5 }}>Topic ഇട്ട് Generate ചെയ്യൂ!<br/><span style={{ fontSize:11 }}>Gemini AI automatically MCQ questions create ചെയ്യും.</span></p>
+      {/* Idle empty state */}
+      {genStatus==="idle" && generatedQs.length===0 && (
+        <div style={{ ...glass(), padding:40, textAlign:"center", color:"#475569" }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>🤖</div>
+          <p style={{ fontSize:13, color:"#475569", lineHeight:1.6 }}>
+            Topic ഇടൂ → Folder choose ചെയ്യൂ → Generate ചെയ്യൂ!<br/>
+            <span style={{ fontSize:11 }}>Puter AI automatically PSC questions create ചെയ്ത് Firebase-ൽ add ചെയ്യും. No API key!</span>
+          </p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Reports Panel Component ────────────────────────────────
+function ReportsPanel({ db, isAdmin, userId, showNotif }) {
+  const [reports, setReports] = useState([]);
+  useEffect(() => {
+    const unsub = onValue(ref(db, "reports"), snap => {
+      const d = []; if (snap.exists()) snap.forEach(c => d.push({ id:c.key, ...c.val() }));
+      setReports(d.filter(r => r.status === "pending"));
+    });
+    return () => unsub();
+  }, []);
+  const dismiss = async (id) => { await update(ref(db, `reports/${id}`), { status:"dismissed" }); showNotif("Report dismissed."); };
+  const deleteQ = async (r) => {
+    if (r.qId) await remove(ref(db, `questions/${r.qId}`));
+    await update(ref(db, `reports/${r.id}`), { status:"actioned" });
+    showNotif("Question deleted!", "error");
+  };
+  const card = (ex={}) => ({ background:"rgba(255,255,255,0.045)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:16, ...ex });
+  const Btn = (bg,col="#fff",ex={}) => ({ background:bg,color:col,border:"none",borderRadius:12,padding:"12px 16px",cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"inherit",transition:"all 0.2s",...ex });
+  if (!reports.length) return <div style={{...card(),padding:40,textAlign:"center",color:"#475569"}}><div style={{fontSize:40}}>✅</div><p style={{marginTop:10}}>No pending reports!</p></div>;
+  return (
+    <div>
+      {reports.map(r => (
+        <div key={r.id} style={{...card(),padding:14,marginBottom:10,borderLeft:"3px solid #ef4444"}}>
+          <div style={{fontSize:10,color:"#ef4444",fontWeight:700,marginBottom:4}}>🚩 Reported by: {r.reportedByName}</div>
+          <p style={{fontSize:13,color:"#f1f5f9",marginBottom:5}}>{r.qText?.substring(0,80)}...</p>
+          <p style={{fontSize:11,color:"#64748b",marginBottom:8}}>Reason: {r.reason}</p>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>dismiss(r.id)} style={{...Btn("rgba(99,102,241,0.15)","#a5b4fc"),flex:1,padding:"9px 0",fontSize:12}}>✓ Dismiss</button>
+            <button onClick={()=>deleteQ(r)} style={{...Btn("rgba(239,68,68,0.15)","#ef4444"),flex:1,padding:"9px 0",fontSize:12}}>🗑️ Delete Q</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -737,9 +745,7 @@ export default function App() {
       questions:Object.fromEntries(qs.map((q,i)=>[i,{q:q.q,options:q.options,answer:q.answer,explanation:q.explanation||""}])),
       players:{ [user.uid]:{ name:user.displayName||user.email, score:0, avatar:(user.displayName||"U")[0].toUpperCase() } }
     });
-    setRoomCode(code);
-    setBattleQ(qs);
-    setScreen("room");
+    setRoomCode(code); setBattleQ(qs); setScreen("room");
   };
 
   const joinRoom = async () => {
@@ -776,13 +782,6 @@ export default function App() {
     const newScore = ok ? battleScore+1 : battleScore;
     if(ok) setBattleScore(newScore);
     set(ref(db,`rooms/${roomCode}/players/${user.uid}/score`), newScore);
-    if(roomData?.players?.computer) {
-      const compOk = computerAnswer(q) === q.answer;
-      const curComp = roomData?.players?.computer?.score || 0;
-      setTimeout(() => {
-        set(ref(db,`rooms/${roomCode}/players/computer/score`), compOk ? curComp+1 : curComp);
-      }, 600+Math.random()*1000);
-    }
   };
 
   const nextBattle = () => {
@@ -804,15 +803,13 @@ export default function App() {
     if(!forumMsg.trim()) return;
     const msg = forumMsg.trim(); setForumMsg("");
     await push(ref(db,"forum"), {
-      uid:user.uid,
-      name:user.displayName||user.email.split("@")[0],
+      uid:user.uid, name:user.displayName||user.email.split("@")[0],
       avatar:(user.displayName||user.email||"U")[0].toUpperCase(),
       msg, category:forumCat, time:Date.now(), likes:0
     });
   };
 
   const deleteForumPost = async (id) => { await remove(ref(db,`forum/${id}`)); };
-
   const likePost = async (post) => {
     const key = `liked_${post.id}`;
     if(localStorage.getItem(key)) return;
@@ -869,8 +866,7 @@ export default function App() {
         addedBy:user.email, addedAt:serverTimestamp()
       });
       setNewQ({q:"",qm:"",o1:"",o2:"",o3:"",o4:"",answer:"0",cat:"ldc",explanation:""});
-      setAddQStatus("✅ Added!");
-      showNotif("Question added! 🎉");
+      setAddQStatus("✅ Added!"); showNotif("Question added! 🎉");
       setTimeout(()=>setAddQStatus(""),3000);
     } catch(e) { setAddQStatus("❌ Error: "+e.message); }
   };
@@ -885,14 +881,12 @@ export default function App() {
 
   const deleteCat = async (id) => {
     if(!window.confirm("Delete this category?")) return;
-    await remove(ref(db,`categories/${id}`));
-    showNotif("Category deleted!","error");
+    await remove(ref(db,`categories/${id}`)); showNotif("Category deleted!","error");
   };
 
   const deleteQ = async (id) => {
     if(!window.confirm("Delete this question?")) return;
-    await remove(ref(db,`questions/${id}`));
-    showNotif("Question deleted!","error");
+    await remove(ref(db,`questions/${id}`)); showNotif("Question deleted!","error");
   };
 
   const addAdmin = async () => {
@@ -957,7 +951,7 @@ export default function App() {
   };
 
   const reportQ = async (qId, qText) => {
-    const reason = window.prompt(`Report reason:\n"${qText.substring(0,50)}"`);
+    const reason = window.prompt(`Report reason:\n"${qText?.substring(0,50)}"`);
     if(!reason) return;
     await push(ref(db,"reports"),{ qId,qText,reason,reportedBy:user.uid,reportedByName:user.displayName||user.email,reportedAt:serverTimestamp(),status:"pending" });
     showNotif("✅ Reported! Admins will review.");
@@ -1246,7 +1240,7 @@ export default function App() {
               <div style={{fontWeight:700,color:"#e2e8f0",marginBottom:10,fontSize:13}}>Players ({Object.keys(roomData?.players||{}).length}/{roomData?.maxPlayers||2})</div>
               {Object.entries(roomData?.players||{}).map(([uid,p])=>(
                 <div key={uid} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
-                  <div style={{width:36,height:36,borderRadius:10,background:`linear-gradient(135deg,#6366f1,#8b5cf6)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14}}>{p.isComputer?"🤖":p.avatar||"U"}</div>
+                  <div style={{width:36,height:36,borderRadius:10,background:`linear-gradient(135deg,#6366f1,#8b5cf6)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14}}>{p.avatar||"U"}</div>
                   <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:uid===user?.uid?"#a5b4fc":"#e2e8f0"}}>{p.name} {uid===user?.uid?"(You)":""}</div></div>
                   <div style={{width:8,height:8,borderRadius:"50%",background:"#10b981"}}/>
                 </div>
@@ -1273,7 +1267,7 @@ export default function App() {
               <div style={{display:"flex",gap:6,marginBottom:10}}>
                 {Object.entries(players).slice(0,4).map(([uid,p])=>(
                   <div key={uid} style={{flex:1,...card(),padding:"8px 6px",textAlign:"center",borderTop:`2px solid ${uid===user?.uid?"#6366f1":"#ef4444"}`}}>
-                    <div style={{fontSize:16,marginBottom:2}}>{p.isComputer?"🤖":p.avatar||"👤"}</div>
+                    <div style={{fontSize:16,marginBottom:2}}>{p.avatar||"👤"}</div>
                     <div style={{fontSize:18,fontWeight:900,color:uid===user?.uid?"#a5b4fc":"#e2e8f0"}}>{p.score||0}</div>
                     <div style={{fontSize:9,color:"#475569",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{uid===user?.uid?"You":p.name.split(" ")[0]}</div>
                   </div>
@@ -1486,17 +1480,16 @@ export default function App() {
             {/* ── Tabs ── */}
             <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:14}}>
               {[
-                ["pending",`⏳(${pendingQ.length})`],
-                ["reports","🚩"],
-                isSuperAdmin&&["gemini","🤖 AI Gen"],
-                isSuperAdmin&&["addq","➕ Add"],
+                ["pending",`⏳ Pending (${pendingQ.length})`],
+                ["reports","🚩 Reports"],
+                isSuperAdmin&&["puterai","🤖 AI Gen"],
+                isSuperAdmin&&["addq","➕ Add Q"],
                 isSuperAdmin&&["bulk","📋 Bulk"],
                 isSuperAdmin&&["cats","📁 Cats"],
                 isSuperAdmin&&["sheet","📊 Sheet"],
                 isSuperAdmin&&["admins","👑 Admins"],
-                isSuperAdmin&&["members","🟢 Members"]
               ].filter(Boolean).map(([t,l])=>(
-                <button key={t} onClick={()=>setAdminTab(t)} style={{padding:"7px 12px",background:adminTab===t?(t==="gemini"?"linear-gradient(135deg,#10b981,#06b6d4)":"linear-gradient(135deg,#6366f1,#8b5cf6)"):"rgba(255,255,255,0.06)",border:`1px solid ${adminTab===t?(t==="gemini"?"#10b981":"#6366f1"):"rgba(255,255,255,0.1)"}`,borderRadius:20,color:adminTab===t?"#fff":"#64748b",cursor:"pointer",fontWeight:700,fontSize:11,transition:"all 0.2s"}}>{l}</button>
+                <button key={t} onClick={()=>setAdminTab(t)} style={{padding:"7px 12px",background:adminTab===t?(t==="puterai"?"linear-gradient(135deg,#6366f1,#8b5cf6)":"linear-gradient(135deg,#6366f1,#8b5cf6)"):"rgba(255,255,255,0.06)",border:`1px solid ${adminTab===t?"#6366f1":"rgba(255,255,255,0.1)"}`,borderRadius:20,color:adminTab===t?"#fff":"#64748b",cursor:"pointer",fontWeight:700,fontSize:11,transition:"all 0.2s",whiteSpace:"nowrap"}}>{l}</button>
               ))}
             </div>
 
@@ -1525,9 +1518,9 @@ export default function App() {
             {/* ── REPORTS ── */}
             {adminTab==="reports"&&<ReportsPanel db={db} isAdmin={isAdmin} userId={user?.uid} showNotif={showNotif}/>}
 
-            {/* ── GEMINI AI GENERATOR ── */}
-            {adminTab==="gemini"&&isSuperAdmin&&(
-              <GeminiQuizGenerator
+            {/* ── PUTER AI GENERATOR ── */}
+            {adminTab==="puterai"&&isSuperAdmin&&(
+              <PuterQuizGenerator
                 db={db}
                 categories={categories}
                 user={user}
@@ -1538,22 +1531,4 @@ export default function App() {
             {/* ── ADD Q ── */}
             {adminTab==="addq"&&isSuperAdmin&&(
               <div style={{...card(),padding:14,borderLeft:"3px solid #6366f1"}}>
-                <div style={{fontWeight:700,color:"#a5b4fc",marginBottom:10}}>➕ Add Question</div>
-                <input value={newQ.q} onChange={e=>setNewQ({...newQ,q:e.target.value})} placeholder="Question (English) *" style={Inp}/>
-                <input value={newQ.qm} onChange={e=>setNewQ({...newQ,qm:e.target.value})} placeholder="Question (Malayalam)" style={Inp}/>
-                {["o1","o2","o3","o4"].map((k,i)=><input key={k} value={newQ[k]} onChange={e=>setNewQ({...newQ,[k]:e.target.value})} placeholder={`Option ${["A","B","C","D"][i]} *`} style={Inp}/>)}
-                <input value={newQ.explanation} onChange={e=>setNewQ({...newQ,explanation:e.target.value})} placeholder="Explanation" style={Inp}/>
-                <div style={{display:"flex",gap:6,marginBottom:10}}>
-                  <select value={newQ.answer} onChange={e=>setNewQ({...newQ,answer:e.target.value})} style={{...Sel,flex:1,marginBottom:0}}><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select>
-                  <select value={newQ.cat} onChange={e=>setNewQ({...newQ,cat:e.target.value})} style={{...Sel,flex:1,marginBottom:0}}>{categories.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}</select>
-                </div>
-                {addQStatus&&<div style={{fontSize:13,marginBottom:10,padding:"8px 12px",borderRadius:10,background:addQStatus.includes("✅")?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)",color:addQStatus.includes("✅")?"#10b981":"#ef4444"}}>{addQStatus}</div>}
-                <button onClick={addDirectQ} style={{...Btn("linear-gradient(135deg,#6366f1,#8b5cf6)"),width:"100%"}}>➕ Add to Firebase</button>
-              </div>
-            )}
-
-            {/* ── BULK ── */}
-            {adminTab==="bulk"&&isSuperAdmin&&(
-              <div>
-                <div style={{...card(),padding:14,marginBottom:10,borderLeft:"3px solid #f59e0b"}}>
-                  <div style={{fontWeight:800,color:"#fbbf24",fontSize:15,marginBottom:6}}>📋 Bulk Paste & U
+                <div style={{fontWeight:700,color:"#a5b4fc",marginBott
