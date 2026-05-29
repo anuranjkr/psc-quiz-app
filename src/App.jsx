@@ -30,8 +30,8 @@ const db = getDatabase(firebaseApp, "https://psc-quiz-kerala-default-rtdb.asia-s
 const gProvider = new GoogleAuthProvider();
 
 // ─── Gemini API Config ─────────────────────────────────────
-const GEMINI_API_KEY = "AIzaSyAb8RN6KhdS7EiRaJHzogxUIc2UbZ3PoFgjDgdJ4voDC9tAxBnA";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_API_KEY = "AQ.Ab8RN6KhdS7EiRaJHzogxUIc2UbZ3PoFgjDgdJ4voDC9tAxBnA";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`;
 
 // ─── Constants ─────────────────────────────────────────────
 const SUPER_ADMIN = "anuranjkr45@gmail.com";
@@ -125,7 +125,10 @@ Format:
 
       const response = await fetch(GEMINI_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
