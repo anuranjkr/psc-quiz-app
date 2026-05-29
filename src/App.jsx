@@ -93,14 +93,14 @@ function PuterQuizGenerator({ db, categories, user, showNotif }) {
   const [isPuterSignedIn, setIsPuterSignedIn] = useState(false);
 
   useEffect(() => {
-    if (window.puter && window.puter.auth.isSignedIn()) {
+    if (window.puter && window.puter.auth && window.puter.auth.isSignedIn()) {
       setIsPuterSignedIn(true);
     }
   }, []);
 
   const handlePuterLogin = async () => {
     try {
-      if (!window.puter) {
+      if (!window.puter || !window.puter.auth) {
         setGenMsg("❌ Puter.js load ആയിട്ടില്ല!");
         return;
       }
@@ -141,7 +141,7 @@ Requirements:
 - ${malayalamInstruction}
 - Vary question types (who/what/when/where/why/how)
 
-Respond with ONLY a valid JSON array. No markdown, no preamble. Example format:
+Respond with ONLY a raw JSON array. DO NOT wrap the JSON in markdown blocks. Do not add any text before or after. Example format:
 [
   {
     "q": "Question text in English",
@@ -152,8 +152,7 @@ Respond with ONLY a valid JSON array. No markdown, no preamble. Example format:
   }
 ]
 
-The "answer" field must be 0, 1, 2, or 3 (index of correct option in options array).
-Generate ${qCount} questions now:`;
+The "answer" field must be an integer 0, 1, 2, or 3 (index of correct option). Generate ${qCount} questions now:`;
 
       const puterPromise = window.puter.ai.chat(prompt);
       const timeoutPromise = new Promise((_, reject) => 
@@ -162,45 +161,74 @@ Generate ${qCount} questions now:`;
 
       const response = await Promise.race([puterPromise, timeoutPromise]);
       
+      // -- ബ്ലാങ്ക് ക്വസ്റ്റ്യൻ എറർ പരിഹരിച്ച ഭാഗം --
       let rawText = "";
       if (typeof response === 'string') {
         rawText = response;
-      } else if (response && typeof response.text === 'string') {
+      } else if (response?.text) {
         rawText = response.text;
-      } else if (response && response.message && typeof response.message.content === 'string') {
-        rawText = response.message.content;
+      } else if (response?.message?.content) {
+        if (typeof response.message.content === 'string') {
+          rawText = response.message.content;
+        } else if (Array.isArray(response.message.content)) {
+          // Claude 3.5 API response format parsing
+          rawText = response.message.content.map(b => b.text || "").join('\n');
+        }
       } else {
         rawText = JSON.stringify(response);
       }
 
-      if (!rawText) {
-         throw new Error("AI തന്ന മറുപടി വായിക്കാൻ കഴിഞ്ഞില്ല.");
+      if (!rawText.trim()) {
+         throw new Error("AI ശൂന്യമായ മറുപടിയാണ് നൽകിയത്. വീണ്ടും ശ്രമിക്കുക.");
       }
 
       let cleaned = String(rawText).trim();
-      cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+      cleaned = cleaned.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
       
       const arrMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (!arrMatch) throw new Error("AI തന്ന മറുപടിയിൽ പ്രശ്നമുണ്ട്. വീണ്ടും Generate ചെയ്യുക.");
+      if (!arrMatch) {
+         throw new Error("AI തന്ന മറുപടിയിൽ JSON ഫോർമാറ്റ് കണ്ടെത്താൻ കഴിഞ്ഞില്ല. വീണ്ടും Generate ചെയ്യുക.");
+      }
 
       const parsed = JSON.parse(arrMatch[0]);
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("Empty or invalid questions array");
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+         throw new Error("AI ചോദ്യങ്ങളൊന്നും ഉണ്ടാക്കിയില്ല.");
+      }
 
-      const normalized = parsed.map((q, i) => ({
-        q: q.q || `Question ${i + 1}`,
-        qm: q.qm || "",
-        options: Array.isArray(q.options) && q.options.length === 4
-          ? q.options.map(o => String(o))
-          : ["Option A", "Option B", "Option C", "Option D"],
-        answer: typeof q.answer === "number" && q.answer >= 0 && q.answer <= 3 ? q.answer : 0,
-        explanation: q.explanation || "",
-        cat: targetCat,
-        _selected: true,
-      }));
+      const normalized = parsed.map((q, i) => {
+        // Handle cases where AI returns letters instead of numbers for the answer
+        let ansIdx = 0;
+        if (typeof q.answer === "number") ansIdx = q.answer;
+        else if (typeof q.answer === "string") {
+            const up = q.answer.toUpperCase();
+            if (up === "A") ansIdx = 0;
+            else if (up === "B") ansIdx = 1;
+            else if (up === "C") ansIdx = 2;
+            else if (up === "D") ansIdx = 3;
+            else ansIdx = parseInt(q.answer) || 0;
+        }
+        ansIdx = (ansIdx >= 0 && ansIdx <= 3) ? ansIdx : 0;
 
-      setGeneratedQs(normalized);
+        return {
+          q: q.q || q.question || `Question ${i + 1}`,
+          qm: q.qm || "",
+          options: Array.isArray(q.options) && q.options.length === 4
+            ? q.options.map(o => String(o))
+            : ["Option A", "Option B", "Option C", "Option D"],
+          answer: ansIdx,
+          explanation: q.explanation || "",
+          cat: targetCat,
+          _selected: true,
+        };
+      });
+
+      // Filter out completely invalid items
+      const validQs = normalized.filter(q => q.q && q.q !== "Question 1");
+      if(validQs.length === 0) throw new Error("AI ഫോർമാറ്റ് തെറ്റിച്ചാണ് ചോദ്യങ്ങൾ തന്നത്. വീണ്ടും ശ്രമിക്കുക.");
+
+      setGeneratedQs(validQs);
       setGenStatus("done");
-      setGenMsg(`✅ ${normalized.length} questions generated!`);
+      setGenMsg(`✅ ${validQs.length} questions generated successfully!`);
       
     } catch (e) {
       setGenStatus("error");
@@ -223,19 +251,31 @@ Generate ${qCount} questions now:`;
   const uploadSelected = async () => {
     const toUpload = generatedQs.filter(q => q._selected);
     if (!toUpload.length) { showNotif("❌ Select at least one question!", "error"); return; }
+    
     setUploadStatus(`⏳ Uploading ${toUpload.length} questions...`);
     let count = 0;
-    for (const q of toUpload) {
-      const { _selected, ...qData } = q;
-      await push(ref(db, "questions"), {
-        ...qData, addedBy: user.email, addedAt: serverTimestamp(), source: "puter_ai", topic: topic,
-      });
-      count++;
+    try {
+        for (const q of toUpload) {
+          const { _selected, ...qData } = q;
+          // Using push + set for better error handling in case of permission issues
+          const newRef = push(ref(db, "questions"));
+          await set(newRef, {
+            ...qData, 
+            addedBy: user.email, 
+            addedAt: serverTimestamp(), 
+            source: "puter_ai", 
+            topic: topic,
+            cat: targetCat // Force category explicitly
+          });
+          count++;
+        }
+        showNotif(`🎉 ${count} AI questions uploaded to Firebase!`);
+        setGeneratedQs(prev => prev.filter(q => !q._selected));
+    } catch (err) {
+        showNotif(`❌ Database Error: ${err.message}`, "error");
+    } finally {
+        setTimeout(() => setUploadStatus(""), 4000);
     }
-    setUploadStatus(`✅ ${count} questions uploaded to Firebase!`);
-    showNotif(`🎉 ${count} AI questions uploaded!`);
-    setGeneratedQs(prev => prev.filter(q => !q._selected));
-    setTimeout(() => setUploadStatus(""), 4000);
   };
 
   const Inp = { width:"100%", background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", color:"#e2e8f0", fontSize:13, marginBottom:10, fontFamily:"inherit", outline:"none" };
