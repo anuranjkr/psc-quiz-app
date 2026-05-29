@@ -100,10 +100,10 @@ function PuterQuizGenerator({ db, categories, user, showNotif }) {
     setGeneratedQs([]);
 
     try {
-      // 1. Puter Login ചെയ്തിട്ടുണ്ടോ എന്ന് പരിശോധിക്കുന്നു
-      if (!window.puter.isSignedIn()) {
+      // 1. Puter Login (Auth fix applied)
+      if (!window.puter.auth.isSignedIn()) {
          setGenMsg("🔐 Puter അക്കൗണ്ടിലേക്ക് ലോഗിൻ ചെയ്യുന്നു... (Pop-up allow ചെയ്യുക)");
-         await window.puter.signIn();
+         await window.puter.auth.signIn();
       }
 
       setGenMsg("🤖 Puter AI (Claude) generating questions...");
@@ -141,7 +141,7 @@ Respond with ONLY a valid JSON array. No markdown, no preamble. Example format:
 The "answer" field must be 0, 1, 2, or 3 (index of correct option in options array).
 Generate ${qCount} questions now:`;
 
-      // 2. Timeout ചേർക്കുന്നു (30 സെക്കൻഡിനുള്ളിൽ മറുപടി വന്നില്ലെങ്കിൽ എറർ കാണിക്കും)
+      // 2. Timeout ചേർക്കുന്നു 
       const puterPromise = window.puter.ai.chat(prompt);
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("Puter AI പ്രതികരിക്കുന്നില്ല (Timeout). വീണ്ടും ശ്രമിക്കുക.")), 30000)
