@@ -29,10 +29,6 @@ const auth = getAuth(firebaseApp);
 const db = getDatabase(firebaseApp, "https://psc-quiz-kerala-default-rtdb.asia-southeast1.firebasedatabase.app");
 const gProvider = new GoogleAuthProvider();
 
-// ─── Gemini API Config ─────────────────────────────────────
-const GEMINI_API_KEY = "AQ.Ab8RN6KhdS7EiRaJHzogxUIc2UbZ3PoFgjDgdJ4voDC9tAxBnA";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`;
-
 // ─── Constants ─────────────────────────────────────────────
 const SUPER_ADMIN = "anuranjkr45@gmail.com";
 
@@ -73,8 +69,8 @@ const Q_COUNT_OPTIONS = [
   { value: 50, label: "50 Questions (Full Set)" },
 ];
 
-// ─── Gemini Quiz Generator Component ──────────────────────
-function GeminiQuizGenerator({ db, categories, user, showNotif }) {
+// ─── Claude Quiz Generator Component ──────────────────────
+function ClaudeQuizGenerator({ db, categories, user, showNotif }) {
   const [topic, setTopic] = useState("");
   const [targetCat, setTargetCat] = useState("ldc");
   const [qCount, setQCount] = useState(10);
@@ -102,7 +98,7 @@ function GeminiQuizGenerator({ db, categories, user, showNotif }) {
       return;
     }
     setGenStatus("loading");
-    setGenMsg(`🤖 Gemini AI generating ${qCount} questions...`);
+    setGenMsg(`🤖 Claude AI generating ${qCount} questions...`);
     setGeneratedQs([]);
 
     try {
@@ -123,18 +119,18 @@ Rules:
 Format:
 [{"q":"Question text","qm":"Malayalam translation or empty","options":["A","B","C","D"],"answer":0,"explanation":"Brief explanation"}]`;
 
-      const response = await fetch(GEMINI_API_URL, {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY,
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 8192,
-          }
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: "You are a quiz generator for Kerala PSC exam preparation. Always respond with valid JSON arrays only. No markdown, no backticks, no explanation text.",
+          messages: [
+            { role: "user", content: prompt }
+          ],
         })
       });
 
@@ -144,7 +140,10 @@ Format:
       }
 
       const data = await response.json();
-      let rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const rawText = data?.content
+        ?.filter(b => b.type === "text")
+        ?.map(b => b.text)
+        ?.join("") || "";
 
       // Clean up any accidental markdown fences
       let cleaned = rawText.trim()
@@ -154,7 +153,7 @@ Format:
         .trim();
 
       const match = cleaned.match(/\[[\s\S]*\]/);
-      if (!match) throw new Error("Gemini returned invalid JSON format.");
+      if (!match) throw new Error("Claude returned invalid JSON format.");
 
       const parsed = JSON.parse(match[0]);
 
@@ -214,10 +213,10 @@ Format:
   return (
     <div style={{ background: "rgba(255,255,255,0.03)", padding: 14, borderRadius: 12, marginBottom: 15, border: "1px solid #1e1e3f" }}>
 
-      {/* Gemini Badge */}
+      {/* Claude Badge */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ background: "linear-gradient(90deg,#4285f4,#ea4335,#fbbc05,#34a853)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: "bold", fontSize: 15 }}>✨ Gemini AI</span>
-        <span style={{ fontSize: 11, color: "#666", background: "#111", padding: "2px 8px", borderRadius: 10 }}>gemini-2.0-flash</span>
+        <span style={{ background: "linear-gradient(90deg,#d97706,#f59e0b,#fbbf24)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: "bold", fontSize: 15 }}>✨ Claude AI</span>
+        <span style={{ fontSize: 11, color: "#666", background: "#111", padding: "2px 8px", borderRadius: 10 }}>claude-sonnet-4</span>
       </div>
 
       {/* Topic Input */}
@@ -289,7 +288,7 @@ Format:
           padding: "12px 0",
           background: genStatus === "loading"
             ? "#222"
-            : "linear-gradient(135deg, #4285f4, #34a853)",
+            : "linear-gradient(135deg, #d97706, #f59e0b)",
           border: "none",
           borderRadius: 8,
           width: "100%",
@@ -303,7 +302,7 @@ Format:
       >
         {genStatus === "loading"
           ? `⏳ Generating ${qCount} Questions...`
-          : `✨ Generate ${qCount} Questions with Gemini`}
+          : `✨ Generate ${qCount} Questions with Claude`}
       </button>
 
       {/* Generated Questions Preview */}
@@ -713,7 +712,7 @@ export default function App() {
             )}
 
             {adminTab === "ai" && (
-              <GeminiQuizGenerator db={db} categories={categories} user={user} showNotif={showNotif} />
+              <ClaudeQuizGenerator db={db} categories={categories} user={user} showNotif={showNotif} />
             )}
           </div>
         )}
